@@ -3,37 +3,18 @@ import pandas_ta as ta
 from datetime import datetime
 import numpy as np
 
-my_nan = np.nan
 import schedule
 import time
 import os
 from ib_insync import *
 
+my_nan = np.nan
+
 ib = IB()
 ib.connect("127.0.0.1", 7497, clientId=1)  # 7497 is default for paper
-
-
-# Optional: Use broker API library like ib_insync for live trading
-from ib_insync import *
-
-# IBKR Example Setup (commented)
-ib = IB()
-ib.connect("127.0.0.1", 7497, clientId=1)
-import numpy as np
 
 my_nan = np.nan
-from ib_insync import *
 
-ib = IB()
-ib.connect("127.0.0.1", 7497, clientId=1)  # 7497 is default for paper
-
-
-# Optional: Use broker API library like ib_insync for live trading
-from ib_insync import *
-
-# IBKR Example Setup (commented)
-ib = IB()
-ib.connect("127.0.0.1", 7497, clientId=1)
 
 # Configurable Parameters
 TICKER = "ES=F"  # S&P 500 E-mini futures (Yahoo symbol)
