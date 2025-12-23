@@ -80,7 +80,7 @@ export default function DataStatistics({ symbol, refreshKey, refreshInterval = 0
             <div className="mt-4 pt-4 border-t border-blue-200">
               <p className="text-xs text-gray-600 mb-2">By Symbol</p>
               <div className="flex flex-wrap gap-2">
-                {statistics.trades.bySymbol.slice(0, 5).map((item: any) => (
+                {statistics.trades.bySymbol.slice(0, 5).map((item: { _id: string; count: number }) => (
                   <span
                     key={item._id}
                     className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-semibold"
@@ -125,7 +125,7 @@ export default function DataStatistics({ symbol, refreshKey, refreshInterval = 0
             <div className="mt-4 pt-4 border-t border-purple-200">
               <p className="text-xs text-gray-600 mb-2">By Symbol</p>
               <div className="flex flex-wrap gap-2">
-                {statistics.signals.bySymbol.slice(0, 5).map((item: any) => (
+                {statistics.signals.bySymbol.slice(0, 5).map((item: { _id: string; count: number }) => (
                   <span
                     key={item._id}
                     className="px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs font-semibold"

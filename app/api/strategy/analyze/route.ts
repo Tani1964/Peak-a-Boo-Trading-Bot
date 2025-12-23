@@ -87,12 +87,13 @@ export async function POST(request: NextRequest) {
         },
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error analyzing strategy:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to analyze strategy';
     return NextResponse.json(
       {
         success: false,
-        error: error.message || 'Failed to analyze strategy',
+        error: errorMessage,
       },
       { status: 500 }
     );
@@ -117,12 +118,13 @@ export async function GET(request: NextRequest) {
       success: true,
       signals,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error fetching signals:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch signals';
     return NextResponse.json(
       {
         success: false,
-        error: error.message || 'Failed to fetch signals',
+        error: errorMessage,
       },
       { status: 500 }
     );

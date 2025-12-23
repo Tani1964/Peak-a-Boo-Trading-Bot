@@ -7,9 +7,23 @@ interface StrategyControlProps {
   onRefresh: () => void;
 }
 
+interface SignalResult {
+  id: string;
+  timestamp: string | Date;
+  symbol: string;
+  signal: 'BUY' | 'SELL' | 'HOLD';
+  closePrice: number;
+  indicators: {
+    rsi: number;
+    macd: number;
+    macdSignal: number;
+    macdHistogram: number;
+  };
+}
+
 export default function StrategyControl({ symbol, onRefresh }: StrategyControlProps) {
   const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<SignalResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const analyzeStrategy = async () => {
@@ -32,8 +46,8 @@ export default function StrategyControl({ symbol, onRefresh }: StrategyControlPr
       }
 
       setResult(data.signal);
-    } catch (err: any) {
-      setError(err.message || 'An error occurred');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setLoading(false);
     }
@@ -66,8 +80,8 @@ export default function StrategyControl({ symbol, onRefresh }: StrategyControlPr
       alert(`✅ Order executed successfully: ${result.signal} ${symbol}`);
       setResult(null);
       onRefresh();
-    } catch (err: any) {
-      setError(err.message || 'An error occurred');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setLoading(false);
     }

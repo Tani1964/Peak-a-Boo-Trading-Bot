@@ -55,7 +55,17 @@ export default function SignalHistory({ symbol, refreshKey, refreshInterval = 0 
         {signals.length === 0 ? (
           <p className="text-gray-500 text-base">No signals yet</p>
         ) : (
-          signals.map((signal: any) => (
+          signals.map((signal: {
+            _id: string;
+            timestamp: string | Date;
+            symbol: string;
+            signal: 'BUY' | 'SELL' | 'HOLD';
+            closePrice: number;
+            rsi: number;
+            macd: number;
+            macdSignal: number;
+            executed: boolean;
+          }) => (
             <div
               key={signal._id}
               className="border-2 border-gray-200 rounded-xl p-4 hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 transition-all hover:border-blue-300"

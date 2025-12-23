@@ -1,4 +1,4 @@
-import alpaca from '@/lib/alpaca';
+import alpaca, { AlpacaPosition } from '@/lib/alpaca';
 import connectDB from '@/lib/mongodb';
 import { NextRequest, NextResponse } from 'next/server';
 
@@ -7,9 +7,9 @@ export async function GET(_request: NextRequest) {
     await connectDB();
 
     // Get positions from Alpaca
-    const positions = await alpaca.getPositions();
+    const positions = await alpaca.getPositions() as AlpacaPosition[];
 
-    const formattedPositions = positions.map((pos: any) => ({
+    const formattedPositions = positions.map((pos: AlpacaPosition) => ({
       symbol: pos.symbol,
       qty: parseFloat(pos.qty),
       side: pos.side,
@@ -24,12 +24,13 @@ export async function GET(_request: NextRequest) {
       success: true,
       positions: formattedPositions,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error fetching positions:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch positions';
     return NextResponse.json(
       {
         success: false,
-        error: error.message || 'Failed to fetch positions',
+        error: errorMessage,
       },
       { status: 500 }
     );

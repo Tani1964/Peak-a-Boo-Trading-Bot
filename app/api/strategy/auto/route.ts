@@ -3,7 +3,7 @@ import connectDB from '@/lib/mongodb';
 import { fetchHistoricalData } from '@/lib/yahoo-finance';
 import { Signal } from '@/models/Signal';
 import { Trade } from '@/models/Trade';
-import alpaca from '@/lib/alpaca';
+import alpaca, { AlpacaPosition, AlpacaOrder } from '@/lib/alpaca';
 import { NextRequest, NextResponse } from 'next/server';
 
 const POSITION_SIZE = 1;
@@ -95,7 +95,35 @@ export async function POST(request: NextRequest) {
 
     await signalDoc.save();
 
-    const result: any = {
+    interface AutoTradeResult {
+      success: boolean;
+      signal: {
+        id: string;
+        timestamp: Date;
+        symbol: string;
+        signal: string;
+        closePrice: number;
+        indicators: {
+          rsi: number;
+          macd: number;
+          macdSignal: number;
+          macdHistogram: number;
+        };
+      };
+      executed: boolean;
+      order?: {
+        id: string;
+        symbol: string;
+        qty: string;
+        side: string;
+        type: string;
+        status: string;
+      };
+      message?: string;
+      executeError?: string;
+    }
+
+    const result: AutoTradeResult = {
       success: true,
       signal: {
         id: signalDoc._id,
@@ -117,9 +145,9 @@ export async function POST(request: NextRequest) {
     if (autoExecute && signal !== 'HOLD') {
       try {
         // Check current position
-        let currentPosition = null;
+        let currentPosition: AlpacaPosition | null = null;
         try {
-          currentPosition = await alpaca.getPosition(symbol);
+          currentPosition = await alpaca.getPosition(symbol) as AlpacaPosition;
         } catch {
           // No position exists
         }
@@ -160,15 +188,16 @@ export async function POST(request: NextRequest) {
         }
 
         if (order) {
+          const orderData = order as AlpacaOrder;
           // Save trade to database
           const trade = new Trade({
             timestamp: new Date(),
             symbol,
-            orderId: order.id,
-            side: signal.toLowerCase(),
+            orderId: orderData.id,
+            side: signal.toLowerCase() as 'buy' | 'sell',
             quantity: POSITION_SIZE,
-            price: parseFloat(order.filled_avg_price || '0'),
-            status: order.status,
+            price: parseFloat(orderData.filled_avg_price || '0'),
+            status: orderData.status as 'pending' | 'filled' | 'cancelled' | 'rejected',
           });
 
           await trade.save();
@@ -176,36 +205,37 @@ export async function POST(request: NextRequest) {
           // Update signal as executed
           await Signal.findByIdAndUpdate(signalDoc._id, {
             executed: true,
-            orderId: order.id,
+            orderId: orderData.id,
           });
 
           result.executed = true;
           result.order = {
-            id: order.id,
-            symbol: order.symbol,
-            qty: order.qty,
-            side: order.side,
-            type: order.type,
-            status: order.status,
+            id: orderData.id,
+            symbol: orderData.symbol,
+            qty: orderData.qty,
+            side: orderData.side,
+            type: orderData.type,
+            status: orderData.status,
           };
         } else {
           result.message = signal === 'BUY' 
             ? `Already holding ${currentQty} shares, no action taken`
             : 'No position to sell, no action taken';
         }
-      } catch (executeError: any) {
-        result.executeError = executeError.message;
+      } catch (executeError: unknown) {
+        result.executeError = executeError instanceof Error ? executeError.message : 'Unknown error executing order';
         console.error('Error executing order:', executeError);
       }
     }
 
     return NextResponse.json(result);
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error in auto trading:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to execute auto trading';
     return NextResponse.json(
       {
         success: false,
-        error: error.message || 'Failed to execute auto trading',
+        error: errorMessage,
       },
       { status: 500 }
     );

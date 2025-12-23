@@ -1,7 +1,23 @@
 'use client';
 
+interface Position {
+  symbol: string;
+  qty: number;
+  side: 'long' | 'short';
+  marketValue: number;
+  costBasis: number;
+  unrealizedPL: number;
+  unrealizedPLPercent: number;
+  currentPrice: number;
+}
+
+interface PositionsData {
+  success: boolean;
+  positions: Position[];
+}
+
 interface PositionsProps {
-  data: any;
+  data: PositionsData;
 }
 
 export default function Positions({ data }: PositionsProps) {
@@ -59,7 +75,7 @@ export default function Positions({ data }: PositionsProps) {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
-            {positions.map((position: any, idx: number) => (
+            {positions.map((position: Position, idx: number) => (
               <tr key={idx} className="hover:bg-blue-50/50 transition-colors">
                 <td className="px-5 py-4 font-bold text-base text-gray-900">{position.symbol}</td>
                 <td className="px-5 py-4 font-semibold text-base text-gray-700">{position.qty}</td>

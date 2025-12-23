@@ -1,7 +1,19 @@
 'use client';
 
+interface AccountData {
+  success: boolean;
+  account?: {
+    status: string;
+    portfolioValue: number;
+    cash: number;
+    buyingPower: number;
+    equity: number;
+    dayTradeCount: number;
+  };
+}
+
 interface AccountInfoProps {
-  data: any;
+  data: AccountData;
 }
 
 export default function AccountInfo({ data }: AccountInfoProps) {

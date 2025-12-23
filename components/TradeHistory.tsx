@@ -55,7 +55,16 @@ export default function TradeHistory({ symbol, refreshKey, refreshInterval = 0 }
         {trades.length === 0 ? (
           <p className="text-gray-500 text-base">No trades yet</p>
         ) : (
-          trades.map((trade: any) => (
+          trades.map((trade: {
+            _id: string;
+            timestamp: string | Date;
+            symbol: string;
+            side: 'buy' | 'sell';
+            quantity: number;
+            price: number;
+            status: 'pending' | 'filled' | 'cancelled' | 'rejected';
+            portfolioValue?: number;
+          }) => (
             <div
               key={trade._id}
               className="border-2 border-gray-200 rounded-xl p-4 hover:bg-gradient-to-r hover:from-blue-50 hover:to-indigo-50 transition-all hover:border-blue-300"

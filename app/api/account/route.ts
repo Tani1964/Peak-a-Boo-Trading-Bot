@@ -1,4 +1,4 @@
-import alpaca from '@/lib/alpaca';
+import alpaca, { AlpacaAccount } from '@/lib/alpaca';
 import connectDB from '@/lib/mongodb';
 import { AccountSnapshot } from '@/models/AccountSnapshot';
 import { NextRequest, NextResponse } from 'next/server';
@@ -8,7 +8,7 @@ export async function GET(_request: NextRequest) {
     await connectDB();
 
     // Get account info from Alpaca
-    const account = await alpaca.getAccount();
+    const account = await alpaca.getAccount() as AlpacaAccount;
 
     // Save snapshot to database
     const snapshot = new AccountSnapshot({
@@ -57,12 +57,13 @@ export async function GET(_request: NextRequest) {
         daysRemaining: Math.max(0, TARGET_DAYS - daysElapsed),
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error fetching account:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch account information';
     return NextResponse.json(
       {
         success: false,
-        error: error.message || 'Failed to fetch account information',
+        error: errorMessage,
       },
       { status: 500 }
     );

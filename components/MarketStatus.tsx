@@ -5,8 +5,17 @@ import { useTimezone } from '@/lib/timezone';
 import { formatDateInTimezone, createTimeInTimezone } from '@/lib/date-utils';
 import { formatInTimeZone } from 'date-fns-tz';
 
+interface MarketStatusData {
+  success: boolean;
+  clock?: {
+    isOpen: boolean;
+    nextOpen?: string;
+    nextClose?: string;
+  };
+}
+
 interface MarketStatusProps {
-  data: any;
+  data: MarketStatusData;
 }
 
 export default function MarketStatus({ data }: MarketStatusProps) {

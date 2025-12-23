@@ -13,12 +13,13 @@ export async function GET(_request: NextRequest) {
         nextClose: clock.next_close,
       },
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error fetching market status:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch market status';
     return NextResponse.json(
       {
         success: false,
-        error: error.message || 'Failed to fetch market status',
+        error: errorMessage,
       },
       { status: 500 }
     );

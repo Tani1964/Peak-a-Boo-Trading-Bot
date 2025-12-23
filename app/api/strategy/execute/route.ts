@@ -1,4 +1,4 @@
-import alpaca from '@/lib/alpaca';
+import alpaca, { AlpacaAccount, AlpacaPosition, AlpacaOrder } from '@/lib/alpaca';
 import connectDB from '@/lib/mongodb';
 import { Signal } from '@/models/Signal';
 import { Trade } from '@/models/Trade';
@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from 'next/server';
 // Goal: Triple account in 30 days (3x growth)
 const GROWTH_TARGET = 3.0; // 3x = 300% return
 const TARGET_DAYS = 30;
-const DAILY_TARGET_RETURN = Math.pow(GROWTH_TARGET, 1 / TARGET_DAYS) - 1; // ~3.7% daily
+const _DAILY_TARGET_RETURN = Math.pow(GROWTH_TARGET, 1 / TARGET_DAYS) - 1; // ~3.7% daily (unused but kept for reference)
 const POSITION_SIZE_PERCENT = 0.5; // Use 50% of buying power per trade (aggressive)
 const MIN_POSITION_SIZE = 1; // Minimum 1 share
 
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Get account info for position sizing
-    const account = await alpaca.getAccount();
+    const account = await alpaca.getAccount() as AlpacaAccount;
     const accountValue = parseFloat(account.portfolio_value);
     const buyingPower = parseFloat(account.buying_power);
     const initialValue = await getInitialAccountValue();
@@ -97,9 +97,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Check current position
-    let currentPosition = null;
+    let currentPosition: AlpacaPosition | null = null;
     try {
-      currentPosition = await alpaca.getPosition(symbol);
+      currentPosition = await alpaca.getPosition(symbol) as AlpacaPosition;
     } catch {
       // No position exists
     }
@@ -189,15 +189,16 @@ export async function POST(request: NextRequest) {
     }
 
     if (order) {
+      const orderData = order as AlpacaOrder;
       // Save trade to database
       const trade = new Trade({
         timestamp: new Date(),
         symbol,
-        orderId: order.id,
-        side: signal.toLowerCase(),
+        orderId: orderData.id,
+        side: signal.toLowerCase() as 'buy' | 'sell',
         quantity: positionSize,
-        price: parseFloat(order.filled_avg_price || '0'),
-        status: order.status,
+        price: parseFloat(orderData.filled_avg_price || '0'),
+        status: orderData.status as 'pending' | 'filled' | 'cancelled' | 'rejected',
       });
 
       await trade.save();
@@ -206,24 +207,24 @@ export async function POST(request: NextRequest) {
       if (signalId) {
         await Signal.findByIdAndUpdate(signalId, {
           executed: true,
-          orderId: order.id,
+          orderId: orderData.id,
         });
       }
 
       // Get updated account info
-      const updatedAccount = await alpaca.getAccount();
+      const updatedAccount = await alpaca.getAccount() as AlpacaAccount;
       const updatedValue = parseFloat(updatedAccount.portfolio_value);
       const updatedGrowth = initialValue ? (updatedValue / initialValue) : 1.0;
 
       return NextResponse.json({
         success: true,
         order: {
-          id: order.id,
-          symbol: order.symbol,
-          qty: order.qty,
-          side: order.side,
-          type: order.type,
-          status: order.status,
+          id: orderData.id,
+          symbol: orderData.symbol,
+          qty: orderData.qty,
+          side: orderData.side,
+          type: orderData.type,
+          status: orderData.status,
         },
         account: {
           portfolioValue: updatedValue,
@@ -243,12 +244,13 @@ export async function POST(request: NextRequest) {
       success: false,
       error: 'Failed to place order',
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error executing order:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to execute order';
     return NextResponse.json(
       {
         success: false,
-        error: error.message || 'Failed to execute order',
+        error: errorMessage,
       },
       { status: 500 }
     );

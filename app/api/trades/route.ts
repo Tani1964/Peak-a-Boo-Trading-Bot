@@ -20,12 +20,13 @@ export async function GET(request: NextRequest) {
       success: true,
       trades,
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error fetching trades:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to fetch trades';
     return NextResponse.json(
       {
         success: false,
-        error: error.message || 'Failed to fetch trades',
+        error: errorMessage,
       },
       { status: 500 }
     );
