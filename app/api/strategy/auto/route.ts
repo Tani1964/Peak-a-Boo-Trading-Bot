@@ -15,6 +15,8 @@ const POSITION_SIZE = 1;
  * Requires API_SECRET token in header for security
  */
 export async function POST(request: NextRequest) {
+  let normalizedSymbol = 'UNKNOWN';
+  
   try {
     // Optional: Check for API secret token for security
     const apiSecret = request.headers.get('x-api-secret');
@@ -34,15 +36,20 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const { symbol = 'SPY', autoExecute = true } = body;
+    normalizedSymbol = symbol.toUpperCase().trim();
+
+    console.log(`🔄 Auto-trading: Processing symbol ${normalizedSymbol} (original: ${symbol})`);
 
     // Check if market is open
     const clock = await alpaca.getClock();
     if (!clock.is_open) {
+      console.log(`⏸️  Market closed for ${normalizedSymbol}, skipping`);
       return NextResponse.json({
         success: false,
         error: 'Market is currently closed',
         nextOpen: clock.next_open,
         skipped: true,
+        symbol: normalizedSymbol,
       });
     }
 
@@ -51,27 +58,34 @@ export async function POST(request: NextRequest) {
     const startDate = new Date();
     startDate.setMonth(startDate.getMonth() - 6);
 
-    const historicalData = await fetchHistoricalData(symbol, startDate, endDate);
+    console.log(`📊 Fetching historical data for ${normalizedSymbol}...`);
+    const historicalData = await fetchHistoricalData(normalizedSymbol, startDate, endDate);
 
     if (historicalData.length === 0) {
+      console.error(`❌ No market data available for ${normalizedSymbol}`);
       return NextResponse.json(
         {
           success: false,
           error: 'No market data available',
+          symbol: normalizedSymbol,
         },
         { status: 400 }
       );
     }
+
+    console.log(`✅ Fetched ${historicalData.length} data points for ${normalizedSymbol}`);
 
     // Calculate technical indicators
     const closePrices = historicalData.map((d) => d.close);
     const indicators = calculateIndicators(closePrices, DEFAULT_CONFIG);
 
     if (!indicators) {
+      console.error(`❌ Insufficient data to calculate indicators for ${normalizedSymbol}`);
       return NextResponse.json(
         {
           success: false,
           error: 'Insufficient data to calculate indicators',
+          symbol: normalizedSymbol,
         },
         { status: 400 }
       );
@@ -80,6 +94,8 @@ export async function POST(request: NextRequest) {
     // Generate trading signal
     const signal = generateSignal(indicators);
     const latestPrice = closePrices[closePrices.length - 1];
+    
+    console.log(`📈 ${normalizedSymbol}: Signal=${signal}, RSI=${indicators.rsi.toFixed(2)}, MACD=${indicators.macd.toFixed(4)}, Price=$${latestPrice.toFixed(2)}`);
 
     // Get account info for tracking
     const account = await alpaca.getAccount();
@@ -91,7 +107,7 @@ export async function POST(request: NextRequest) {
     // Save signal to database
     const signalDoc = new Signal({
       timestamp: new Date(),
-      symbol,
+      symbol: normalizedSymbol,
       signal,
       closePrice: latestPrice,
       rsi: indicators.rsi,
@@ -102,6 +118,7 @@ export async function POST(request: NextRequest) {
     });
 
     await signalDoc.save();
+    console.log(`💾 Saved ${signal} signal for ${normalizedSymbol} (ID: ${signalDoc._id})`);
     
     // Save account snapshot for tracking (even if signal not executed)
     const { AccountSnapshot } = await import('@/models/AccountSnapshot');
@@ -153,7 +170,7 @@ export async function POST(request: NextRequest) {
       signal: {
         id: signalDoc._id.toString(),
         timestamp: signalDoc.timestamp,
-        symbol,
+        symbol: normalizedSymbol,
         signal,
         closePrice: latestPrice,
         indicators: {
@@ -173,49 +190,58 @@ export async function POST(request: NextRequest) {
     };
 
     // Auto-execute if enabled and signal is not HOLD
-    if (autoExecute && signal !== 'HOLD') {
+    if (signal === 'HOLD') {
+      console.log(`⏸️  ${normalizedSymbol}: HOLD signal - no trade executed`);
+      result.message = 'HOLD signal - no action taken';
+    } else if (autoExecute && signal !== 'HOLD') {
+      console.log(`🚀 ${normalizedSymbol}: ${signal} signal - attempting to execute trade...`);
       try {
         // Check current position
         let currentPosition: AlpacaPosition | null = null;
         try {
-          currentPosition = await alpaca.getPosition(symbol) as AlpacaPosition;
+          currentPosition = await alpaca.getPosition(normalizedSymbol) as AlpacaPosition;
         } catch {
           // No position exists
         }
 
         const currentQty = currentPosition ? parseInt(currentPosition.qty) : 0;
+        console.log(`📊 ${normalizedSymbol}: Current position = ${currentQty} shares`);
         let order = null;
 
         if (signal === 'BUY' && currentQty <= 0) {
           // Close any short position first
           if (currentQty < 0) {
-            await alpaca.closePosition(symbol);
+            console.log(`🔄 ${normalizedSymbol}: Closing short position before buying...`);
+            await alpaca.closePosition(normalizedSymbol);
           }
 
           // Place buy order
           order = await alpaca.createOrder({
-            symbol,
+            symbol: normalizedSymbol,
             qty: POSITION_SIZE,
             side: 'buy',
             type: 'market',
             time_in_force: 'day',
           });
 
-          console.log(`✅ BUY order placed: ${POSITION_SIZE} shares of ${symbol}`);
+          console.log(`✅ BUY order placed: ${POSITION_SIZE} shares of ${normalizedSymbol}`);
         } else if (signal === 'SELL' && currentQty > 0) {
           // Close long position
-          await alpaca.closePosition(symbol);
+          console.log(`🔄 ${normalizedSymbol}: Closing long position before selling...`);
+          await alpaca.closePosition(normalizedSymbol);
 
           // Place sell (short) order
           order = await alpaca.createOrder({
-            symbol,
+            symbol: normalizedSymbol,
             qty: POSITION_SIZE,
             side: 'sell',
             type: 'market',
             time_in_force: 'day',
           });
 
-          console.log(`✅ SELL order placed: ${POSITION_SIZE} shares of ${symbol}`);
+          console.log(`✅ SELL order placed: ${POSITION_SIZE} shares of ${normalizedSymbol}`);
+        } else {
+          console.log(`⏸️  ${normalizedSymbol}: No action - signal=${signal}, currentQty=${currentQty}`);
         }
 
         if (order) {
@@ -235,7 +261,7 @@ export async function POST(request: NextRequest) {
           // Save trade to database with enhanced data
           const trade = new Trade({
             timestamp: new Date(),
-            symbol,
+            symbol: normalizedSymbol,
             orderId: orderData.id,
             side: signal.toLowerCase() as 'buy' | 'sell',
             quantity: POSITION_SIZE,
@@ -285,18 +311,20 @@ export async function POST(request: NextRequest) {
         }
       } catch (executeError: unknown) {
         result.executeError = executeError instanceof Error ? executeError.message : 'Unknown error executing order';
-        console.error('Error executing order:', executeError);
+        console.error(`❌ Error executing order for ${normalizedSymbol}:`, executeError);
       }
     }
 
+    console.log(`✅ Completed processing ${normalizedSymbol}: signal=${signal}, executed=${result.executed}`);
     return NextResponse.json(result);
   } catch (error: unknown) {
-    console.error('Error in auto trading:', error);
+    console.error(`❌ Error in auto trading for ${normalizedSymbol}:`, error);
     const errorMessage = error instanceof Error ? error.message : 'Failed to execute auto trading';
     return NextResponse.json(
       {
         success: false,
         error: errorMessage,
+        symbol: normalizedSymbol,
       },
       { status: 500 }
     );

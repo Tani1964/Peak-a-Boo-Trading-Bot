@@ -52,7 +52,8 @@ Your Next.js app has API endpoints that can be called on a schedule to automatic
    - Or set it as a GitHub secret (recommended) and update the workflow to use `${{ secrets.APP_URL }}`
 
 2. Adjust the schedule if needed:
-   - Current: `30 13 * * 1-5` (Mon-Fri at 13:30 UTC = 9:30 AM EDT)
+   - Current: `0,30 13-20 * * 1-5` (Every 30 minutes during market hours: 9:30 AM - 4:00 PM ET, Mon-Fri)
+   - This runs at :00 and :30 of each hour from 13:00 to 20:59 UTC
    - Use [crontab.guru](https://crontab.guru/) to customize
 
 ### Step 3: Commit and Push

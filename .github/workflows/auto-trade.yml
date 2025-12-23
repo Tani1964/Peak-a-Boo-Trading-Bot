@@ -2,173 +2,56 @@ name: Auto Trade
 
 on:
   schedule:
-    # Run every minute during market hours (9:30 AM - 4:00 PM ET) on weekdays
-    # Note: GitHub Actions uses UTC time
-    # Market hours: 9:30 AM - 4:00 PM ET
-    # EST: 14:30 - 21:00 UTC | EDT: 13:30 - 20:00 UTC
-    # Using 13-21 UTC to cover both timezones (runs slightly before/after actual hours for safety)
-    # This ensures we don't miss any trades at market open/close
-    - cron: '* 13-20 * * 1-5'  # Every minute, Mon-Fri, 13:00-20:59 UTC
-    - cron: '* 21 * * 1-5'     # Every minute at 21:00 UTC (4:00 PM EST) to catch last trades
-  
-  # Allow manual trigger
-  workflow_dispatch:
-    inputs:
-      symbols:
-        description: 'Comma-separated stock symbols (e.g., SPY,QQQ,AAPL) or leave empty to use TRADING_SYMBOLS secret'
-        required: false
-        default: ''
+    # Run every 30 minutes during market hours (9:30 AM - 4:00 PM ET)
+    # Covers both EST (UTC-5) and EDT (UTC-4) timezones
+    # Format: minute hour day-of-month month day-of-week
+    # Runs at :00 and :30 of each hour from 13:00 to 21:00 UTC (Mon-Fri)
+    - cron: '0,30 13-20 * * 1-5'
+  workflow_dispatch: # Allows manual triggering
 
 jobs:
-  trade:
+  auto-trade:
     runs-on: ubuntu-latest
+    
     steps:
-      - name: Trigger Auto Trade
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Trade symbols
         env:
           APP_URL: ${{ secrets.APP_URL }}
-          API_SECRET: ${{ secrets.AUTO_TRADE_SECRET }}
-          # Get symbols from input, or from secret, or default to SPY
-          SYMBOLS_INPUT: ${{ github.event.inputs.symbols }}
-          SYMBOLS_SECRET: ${{ secrets.TRADING_SYMBOLS }}
+          AUTO_TRADE_SECRET: ${{ secrets.AUTO_TRADE_SECRET }}
+          TRADING_SYMBOLS: ${{ secrets.TRADING_SYMBOLS }}
         run: |
-          echo "🚀 Triggering auto trade at $(date)"
-          echo "App URL: $APP_URL"
-          
-          if [ -z "$APP_URL" ]; then
-            echo "❌ APP_URL secret is not set. Please add it in GitHub Secrets."
-            exit 1
-          fi
-          
-          # Determine which symbols to trade
-          if [ -n "$SYMBOLS_INPUT" ]; then
-            SYMBOLS="$SYMBOLS_INPUT"
-            echo "📊 Using symbols from workflow input: $SYMBOLS"
-          elif [ -n "$SYMBOLS_SECRET" ]; then
-            SYMBOLS="$SYMBOLS_SECRET"
-            echo "📊 Using symbols from TRADING_SYMBOLS secret: $SYMBOLS"
-          else
+          # If TRADING_SYMBOLS is set, trade each symbol
+          # Otherwise, default to SPY
+          if [ -z "$TRADING_SYMBOLS" ]; then
             SYMBOLS="SPY"
-            echo "📊 No symbols configured, using default: $SYMBOLS"
-            echo "ℹ️  Tip: Set TRADING_SYMBOLS secret (comma-separated) to trade multiple symbols automatically"
+          else
+            SYMBOLS="$TRADING_SYMBOLS"
           fi
           
-          if [ -z "$API_SECRET" ]; then
-            echo "⚠️ AUTO_TRADE_SECRET not set. Endpoint may require authentication."
-          fi
-          
-          # Convert comma-separated string to array and loop through symbols
+          # Split comma-separated symbols and trade each one
           IFS=',' read -ra SYMBOL_ARRAY <<< "$SYMBOLS"
-          total_symbols=${#SYMBOL_ARRAY[@]}
-          success_count=0
-          fail_count=0
-          
-          echo "📈 Trading $total_symbols symbol(s): ${SYMBOL_ARRAY[*]}"
-          echo "🔄 Running every 30 seconds to catch all trading opportunities"
-          echo ""
-          
-          # Function to process a single symbol
-          process_symbol() {
-            local symbol=$1
-            local call_number=$2
+          for symbol in "${SYMBOL_ARRAY[@]}"; do
+            symbol=$(echo "$symbol" | xargs) # Trim whitespace
+            echo "🔄 Trading symbol: $symbol"
             
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "📊 Processing symbol: $symbol (Call #$call_number)"
-            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            
-            # Make the request to your API endpoint (with -L to follow redirects)
-            if [ -z "$API_SECRET" ]; then
-              response=$(curl -s -L -w "\n%{http_code}" -X POST "$APP_URL/api/strategy/auto" \
-                -H "Content-Type: application/json" \
-                -d "{\"symbol\": \"$symbol\", \"autoExecute\": true}")
-            else
-              response=$(curl -s -L -w "\n%{http_code}" -X POST "$APP_URL/api/strategy/auto" \
-                -H "Content-Type: application/json" \
-                -H "x-api-secret: $API_SECRET" \
-                -d "{\"symbol\": \"$symbol\", \"autoExecute\": true}")
-            fi
+            response=$(curl -s -w "\n%{http_code}" -X POST "$APP_URL/api/strategy/auto" \
+              -H "Content-Type: application/json" \
+              -H "x-api-secret: $AUTO_TRADE_SECRET" \
+              -d "{\"symbol\": \"$symbol\", \"autoExecute\": true}")
             
             http_code=$(echo "$response" | tail -n1)
             body=$(echo "$response" | sed '$d')
             
-            echo "Response code: $http_code"
-            echo "Response body:"
-            echo "$body" | jq '.' 2>/dev/null || echo "$body"
-            
-            if [ "$http_code" -eq 401 ]; then
-              echo "❌ Unauthorized. Check that AUTO_TRADE_SECRET matches your server's AUTO_TRADE_SECRET env var."
-              return 1
-            elif [ "$http_code" -ne 200 ]; then
-              echo "❌ Request failed with status $http_code for $symbol"
-              return 1
-            fi
-            
-            # Check if the response indicates success
-            success=$(echo "$body" | grep -o '"success":[^,}]*' | grep -o 'true\|false' | head -1)
-            skipped=$(echo "$body" | grep -o '"skipped":[^,}]*' | grep -o 'true\|false' | head -1)
-            
-            if [ "$skipped" = "true" ]; then
-              echo "ℹ️ Trade skipped for $symbol (likely market is closed)"
-              return 0
-            elif [ "$success" != "true" ]; then
-              echo "⚠️ Trade may have failed or been skipped for $symbol"
-              return 1
+            if [ "$http_code" -eq 200 ] || [ "$http_code" -eq 201 ]; then
+              echo "✅ Successfully traded $symbol"
+              echo "$body" | jq '.' || echo "$body"
             else
-              echo "✅ Auto trade completed successfully for $symbol"
-              executed=$(echo "$body" | grep -o '"executed":[^,}]*' | grep -o 'true\|false' | head -1)
-              if [ "$executed" = "true" ]; then
-                echo "✅ Trade was executed for $symbol"
-                return 0
-              else
-                echo "ℹ️ Signal generated but trade not executed for $symbol (likely HOLD signal or already have position)"
-                return 0
-              fi
+              echo "❌ Failed to trade $symbol (HTTP $http_code)"
+              echo "$body"
             fi
-          }
-          
-          # Process all symbols twice - once immediately, once after 30 seconds
-          # This ensures signals are generated every 30 seconds
-          for call_num in 1 2; do
-            echo ""
-            echo "════════════════════════════════════════════"
-            echo "🔄 Signal Generation Call #$call_num"
-            echo "════════════════════════════════════════════"
-            echo ""
             
-            for symbol in "${SYMBOL_ARRAY[@]}"; do
-              # Trim whitespace
-              symbol=$(echo "$symbol" | xargs)
-              
-              if [ -z "$symbol" ]; then
-                continue
-              fi
-              
-              if process_symbol "$symbol" "$call_num"; then
-                ((success_count++))
-              else
-                ((fail_count++))
-              fi
-              
-              echo ""
-              # Small delay between symbols to avoid rate limits
-              sleep 1
-            done
-            
-            # Wait 30 seconds before the second call (except after the last call)
-            if [ $call_num -eq 1 ]; then
-              echo "⏳ Waiting 30 seconds before next signal generation..."
-              sleep 30
-            fi
+            echo "---"
           done
-          
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          echo "📊 Summary:"
-          echo "   Total symbols: $total_symbols"
-          echo "   Successful: $success_count"
-          echo "   Failed: $fail_count"
-          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-          
-          if [ $fail_count -gt 0 ]; then
-            echo "⚠️ Some trades failed"
-            exit 1
-          fi
-
