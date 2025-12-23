@@ -1,5 +1,6 @@
 'use client';
 
+import { useRef } from 'react';
 import useSWR from 'swr';
 import {
   Chart as ChartJS,
@@ -12,8 +13,11 @@ import {
   Tooltip,
   Legend,
   Filler,
+  TimeScale,
 } from 'chart.js';
 import { Line, Bar } from 'react-chartjs-2';
+import zoomPlugin from 'chartjs-plugin-zoom';
+import 'chartjs-adapter-date-fns';
 import { useTimezone } from '@/lib/timezone';
 import { formatDateInTimezone } from '@/lib/date-utils';
 
@@ -26,7 +30,9 @@ ChartJS.register(
   Title,
   Tooltip,
   Legend,
-  Filler
+  Filler,
+  TimeScale,
+  zoomPlugin
 );
 
 interface PerformanceGraphProps {
@@ -42,9 +48,10 @@ export default function PerformanceGraph({
   symbol, 
   refreshKey, 
   refreshInterval = 0,
-  days = 30 
+  days = 3650 // Default to 10 years to fetch all available data
 }: PerformanceGraphProps) {
   const { timezone } = useTimezone();
+  const portfolioChartRef = useRef<any>(null);
   const { data, error } = useSWR(
     `/api/performance?symbol=${symbol}&days=${days}&refresh=${refreshKey}`,
     fetcher,
@@ -52,6 +59,12 @@ export default function PerformanceGraph({
       refreshInterval: refreshInterval,
     }
   );
+
+  const handleResetZoom = () => {
+    if (portfolioChartRef.current) {
+      portfolioChartRef.current.resetZoom();
+    }
+  };
 
   if (error) {
     return (
@@ -84,15 +97,23 @@ export default function PerformanceGraph({
     equity: number;
     cash: number;
   }
-  const portfolioLabels = chartData.portfolio.map((d: PortfolioDataPoint) =>
-    formatDateInTimezone(d.timestamp, timezone, 'MMM dd, HH:mm')
-  );
+  
+  // Convert timestamps to Date objects for proper time scale handling
+  const portfolioDataPoints = chartData.portfolio.map((d: PortfolioDataPoint) => ({
+    x: new Date(d.timestamp),
+    y: d.portfolioValue,
+  }));
+  
+  const equityDataPoints = chartData.portfolio.map((d: PortfolioDataPoint) => ({
+    x: new Date(d.timestamp),
+    y: d.equity,
+  }));
+  
   const portfolioData = {
-    labels: portfolioLabels,
     datasets: [
       {
         label: 'Portfolio Value',
-        data: chartData.portfolio.map((d: PortfolioDataPoint) => d.portfolioValue),
+        data: portfolioDataPoints,
         borderColor: 'rgb(59, 130, 246)',
         backgroundColor: 'rgba(59, 130, 246, 0.1)',
         fill: true,
@@ -102,7 +123,7 @@ export default function PerformanceGraph({
       },
       {
         label: 'Equity',
-        data: chartData.portfolio.map((d: PortfolioDataPoint) => d.equity),
+        data: equityDataPoints,
         borderColor: 'rgb(34, 197, 94)',
         backgroundColor: 'rgba(34, 197, 94, 0.1)',
         fill: true,
@@ -169,6 +190,10 @@ export default function PerformanceGraph({
   const chartOptions = {
     responsive: true,
     maintainAspectRatio: false,
+    interaction: {
+      mode: 'index' as const,
+      intersect: false,
+    },
     plugins: {
       legend: {
         position: 'top' as const,
@@ -176,10 +201,46 @@ export default function PerformanceGraph({
       tooltip: {
         mode: 'index' as const,
         intersect: false,
+        callbacks: {
+          title: (context: any) => {
+            const date = new Date(context[0].parsed.x);
+            return formatDateInTimezone(date, timezone, 'MMM dd, yyyy HH:mm');
+          },
+        },
+      },
+      zoom: {
+        zoom: {
+          wheel: {
+            enabled: true,
+          },
+          pinch: {
+            enabled: true,
+          },
+          mode: 'x' as const,
+        },
+        pan: {
+          enabled: true,
+          mode: 'x' as const,
+        },
       },
     },
     scales: {
       x: {
+        type: 'time' as const,
+        time: {
+          displayFormats: {
+            millisecond: 'MMM dd HH:mm',
+            second: 'MMM dd HH:mm',
+            minute: 'MMM dd HH:mm',
+            hour: 'MMM dd HH:mm',
+            day: 'MMM dd',
+            week: 'MMM dd',
+            month: 'MMM yyyy',
+            quarter: 'MMM yyyy',
+            year: 'yyyy',
+          },
+          tooltipFormat: 'MMM dd, yyyy HH:mm',
+        },
         display: true,
         grid: {
           display: false,
@@ -242,9 +303,24 @@ export default function PerformanceGraph({
         {/* Portfolio Value Chart */}
         {chartData.portfolio.length > 0 && (
           <div>
-            <h3 className="text-lg font-bold mb-4 text-gray-900">Portfolio Value Over Time</h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-gray-900">Portfolio Value Over Time</h3>
+              <button
+                onClick={handleResetZoom}
+                className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+              >
+                🔍 Reset Zoom
+              </button>
+            </div>
             <div className="h-64">
-              <Line data={portfolioData} options={chartOptions} />
+              <Line 
+                ref={portfolioChartRef}
+                data={portfolioData} 
+                options={chartOptions} 
+              />
+            </div>
+            <div className="mt-2 text-xs text-gray-500">
+              💡 Use mouse wheel to zoom, drag to pan, or click Reset Zoom to view all data
             </div>
           </div>
         )}

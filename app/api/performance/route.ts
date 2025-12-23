@@ -11,16 +11,21 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const symbol = searchParams.get('symbol');
-    const days = parseInt(searchParams.get('days') || '30');
+    const daysParam = searchParams.get('days');
+    const days = daysParam ? parseInt(daysParam) : null;
 
-    // Calculate date range
+    // Calculate date range - if days is very large or not specified, fetch all data
     const endDate = new Date();
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - days);
+    const startDate = days && days < 3650 ? (() => {
+      const date = new Date();
+      date.setDate(date.getDate() - days);
+      return date;
+    })() : null; // null means fetch all data
 
     // Build queries
-    const tradeQuery: FilterQuery<ITrade> = { timestamp: { $gte: startDate } };
-    const signalQuery: FilterQuery<ISignal> = { timestamp: { $gte: startDate } };
+    const tradeQuery: FilterQuery<ITrade> = startDate ? { timestamp: { $gte: startDate } } : {};
+    const signalQuery: FilterQuery<ISignal> = startDate ? { timestamp: { $gte: startDate } } : {};
+    const snapshotQuery: FilterQuery<any> = startDate ? { timestamp: { $gte: startDate } } : {};
     
     if (symbol) {
       tradeQuery.symbol = symbol;
@@ -31,7 +36,7 @@ export async function GET(request: NextRequest) {
     const [trades, signals, snapshots] = await Promise.all([
       Trade.find(tradeQuery).sort({ timestamp: 1 }).lean(),
       Signal.find(signalQuery).sort({ timestamp: 1 }).lean(),
-      AccountSnapshot.find({ timestamp: { $gte: startDate } }).sort({ timestamp: 1 }).lean(),
+      AccountSnapshot.find(snapshotQuery).sort({ timestamp: 1 }).lean(),
     ]);
 
     // Calculate performance metrics
@@ -172,9 +177,9 @@ export async function GET(request: NextRequest) {
         signals: signalChartData,
       },
       period: {
-        startDate,
+        startDate: startDate || (snapshots.length > 0 ? snapshots[0].timestamp : null),
         endDate,
-        days,
+        days: days || (startDate ? null : 'all'),
       },
     });
   } catch (error: unknown) {
