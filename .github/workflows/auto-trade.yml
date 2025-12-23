@@ -37,7 +37,7 @@ jobs:
             symbol=$(echo "$symbol" | xargs) # Trim whitespace
             echo "🔄 Trading symbol: $symbol"
             
-            response=$(curl -s -w "\n%{http_code}" -X POST "$APP_URL/api/strategy/auto" \
+            response=$(curl -s -L -w "\n%{http_code}" -X POST "$APP_URL/api/strategy/auto" \
               -H "Content-Type: application/json" \
               -H "x-api-secret: $AUTO_TRADE_SECRET" \
               -d "{\"symbol\": \"$symbol\", \"autoExecute\": true}")
