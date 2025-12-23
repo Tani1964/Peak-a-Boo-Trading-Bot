@@ -1,7 +1,8 @@
 'use client';
 
-import { format } from 'date-fns';
 import useSWR from 'swr';
+import { useTimezone } from '@/lib/timezone';
+import { formatDateInTimezone } from '@/lib/date-utils';
 
 interface SignalHistoryProps {
   symbol: string;
@@ -11,6 +12,7 @@ interface SignalHistoryProps {
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
 export default function SignalHistory({ symbol, refreshKey }: SignalHistoryProps) {
+  const { timezone } = useTimezone();
   const { data, error } = useSWR(
     `/api/strategy/analyze?symbol=${symbol}&limit=20&refresh=${refreshKey}`,
     fetcher
@@ -74,7 +76,7 @@ export default function SignalHistory({ symbol, refreshKey }: SignalHistoryProps
                   )}
                 </div>
                 <span className="text-sm text-gray-600 font-medium">
-                  {format(new Date(signal.timestamp), 'MMM dd, HH:mm')}
+                  {formatDateInTimezone(signal.timestamp, timezone, 'MMM dd, HH:mm')}
                 </span>
               </div>
               <div className="space-y-2">

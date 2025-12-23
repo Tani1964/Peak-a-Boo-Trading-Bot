@@ -3,7 +3,6 @@ import connectDB from '@/lib/mongodb';
 import { fetchHistoricalData } from '@/lib/yahoo-finance';
 import { Signal } from '@/models/Signal';
 import { NextRequest, NextResponse } from 'next/server';
-import alpaca from '@/lib/alpaca';
 
 export async function POST(request: NextRequest) {
   try {
@@ -13,7 +12,7 @@ export async function POST(request: NextRequest) {
     const { symbol = 'SPY' } = body;
 
     // Check if market is open
-    const clock = await alpaca.getClock();
+    const clock = await (global as any).alpaca.getClock();
     if (!clock.is_open) {
       return NextResponse.json({
         success: false,

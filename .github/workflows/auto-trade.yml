@@ -1,0 +1,87 @@
+name: Auto Trade
+
+on:
+  schedule:
+    # Run every weekday at 9:30 AM ET (14:30 UTC, market open time)
+    # Note: GitHub Actions uses UTC time
+    # 9:30 AM ET = 14:30 UTC (during EST) or 13:30 UTC (during EDT)
+    # Using 13:30 UTC to cover EDT (Eastern Daylight Time)
+    - cron: '30 13 * * 1-5'  # Mon-Fri at 13:30 UTC (9:30 AM EDT / 8:30 AM EST)
+  
+  # Allow manual trigger
+  workflow_dispatch:
+    inputs:
+      symbol:
+        description: 'Stock symbol to trade'
+        required: false
+        default: 'SPY'
+
+jobs:
+  trade:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Auto Trade
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          API_SECRET: ${{ secrets.AUTO_TRADE_SECRET }}
+          SYMBOL: ${{ github.event.inputs.symbol || 'SPY' }}
+        run: |
+          echo "🚀 Triggering auto trade at $(date)"
+          echo "Symbol: $SYMBOL"
+          echo "App URL: $APP_URL"
+          
+          if [ -z "$APP_URL" ]; then
+            echo "❌ APP_URL secret is not set. Please add it in GitHub Secrets."
+            exit 1
+          fi
+          
+          if [ -z "$API_SECRET" ]; then
+            echo "⚠️ AUTO_TRADE_SECRET not set. Endpoint may require authentication."
+          fi
+          
+          # Make the request to your API endpoint
+          if [ -z "$API_SECRET" ]; then
+            response=$(curl -s -w "\n%{http_code}" -X POST "$APP_URL/api/strategy/auto" \
+              -H "Content-Type: application/json" \
+              -d "{\"symbol\": \"$SYMBOL\", \"autoExecute\": true}")
+          else
+            response=$(curl -s -w "\n%{http_code}" -X POST "$APP_URL/api/strategy/auto" \
+              -H "Content-Type: application/json" \
+              -H "x-api-secret: $API_SECRET" \
+              -d "{\"symbol\": \"$SYMBOL\", \"autoExecute\": true}")
+          fi
+          
+          http_code=$(echo "$response" | tail -n1)
+          body=$(echo "$response" | sed '$d')
+          
+          echo "Response code: $http_code"
+          echo "Response body:"
+          echo "$body" | jq '.' 2>/dev/null || echo "$body"
+          
+          if [ "$http_code" -eq 401 ]; then
+            echo "❌ Unauthorized. Check that AUTO_TRADE_SECRET matches your server's AUTO_TRADE_SECRET env var."
+            exit 1
+          elif [ "$http_code" -ne 200 ]; then
+            echo "❌ Request failed with status $http_code"
+            exit 1
+          fi
+          
+          # Check if the response indicates success
+          success=$(echo "$body" | grep -o '"success":[^,}]*' | grep -o 'true\|false' | head -1)
+          skipped=$(echo "$body" | grep -o '"skipped":[^,}]*' | grep -o 'true\|false' | head -1)
+          
+          if [ "$skipped" = "true" ]; then
+            echo "ℹ️ Trade skipped (likely market is closed)"
+          elif [ "$success" != "true" ]; then
+            echo "⚠️ Trade may have failed or been skipped"
+            echo "$body"
+          else
+            echo "✅ Auto trade completed successfully"
+            executed=$(echo "$body" | grep -o '"executed":[^,}]*' | grep -o 'true\|false' | head -1)
+            if [ "$executed" = "true" ]; then
+              echo "✅ Trade was executed"
+            else
+              echo "ℹ️ Signal generated but trade not executed (likely HOLD signal or already have position)"
+            fi
+          fi
+
