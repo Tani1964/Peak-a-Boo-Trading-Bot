@@ -2,6 +2,7 @@ import { calculateIndicators, DEFAULT_CONFIG, generateSignal } from '@/lib/indic
 import connectDB from '@/lib/mongodb';
 import { fetchHistoricalData } from '@/lib/yahoo-finance';
 import { Signal } from '@/models/Signal';
+import alpaca from '@/lib/alpaca';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
@@ -12,7 +13,7 @@ export async function POST(request: NextRequest) {
     const { symbol = 'SPY' } = body;
 
     // Check if market is open
-    const clock = await (global as any).alpaca.getClock();
+    const clock = await alpaca.getClock();
     if (!clock.is_open) {
       return NextResponse.json({
         success: false,
