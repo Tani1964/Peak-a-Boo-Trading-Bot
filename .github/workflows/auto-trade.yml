@@ -39,13 +39,13 @@ jobs:
             echo "⚠️ AUTO_TRADE_SECRET not set. Endpoint may require authentication."
           fi
           
-          # Make the request to your API endpoint
+          # Make the request to your API endpoint (with -L to follow redirects)
           if [ -z "$API_SECRET" ]; then
-            response=$(curl -s -w "\n%{http_code}" -X POST "$APP_URL/api/strategy/auto" \
+            response=$(curl -s -L -w "\n%{http_code}" -X POST "$APP_URL/api/strategy/auto" \
               -H "Content-Type: application/json" \
               -d "{\"symbol\": \"$SYMBOL\", \"autoExecute\": true}")
           else
-            response=$(curl -s -w "\n%{http_code}" -X POST "$APP_URL/api/strategy/auto" \
+            response=$(curl -s -L -w "\n%{http_code}" -X POST "$APP_URL/api/strategy/auto" \
               -H "Content-Type: application/json" \
               -H "x-api-secret: $API_SECRET" \
               -d "{\"symbol\": \"$SYMBOL\", \"autoExecute\": true}")
