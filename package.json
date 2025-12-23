@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@alpacahq/alpaca-trade-api": "^3.0.3",
+    "@distube/ytdl-core": "^4.16.12",
     "@types/node": "^20.10.5",
     "@types/react": "^18.2.45",
     "@types/react-dom": "^18.2.18",
@@ -25,7 +26,8 @@
     "react-dom": "^18.2.0",
     "recharts": "^2.10.3",
     "swr": "^2.2.4",
-    "technicalindicators": "^3.1.0"
+    "technicalindicators": "^3.1.0",
+    "youtube-transcript": "^1.2.1"
   },
   "devDependencies": {
     "@typescript-eslint/eslint-plugin": "^8.50.1",

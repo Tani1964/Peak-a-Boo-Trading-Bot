@@ -8,6 +8,7 @@ export interface ISignal {
   rsi: number;
   macd: number;
   macdSignal: number;
+  macdHistogram: number;
   executed: boolean;
   orderId?: string;
 }
@@ -21,6 +22,7 @@ const SignalSchema = new Schema<ISignal>(
     rsi: { type: Number, required: true },
     macd: { type: Number, required: true },
     macdSignal: { type: Number, required: true },
+    macdHistogram: { type: Number, required: true },
     executed: { type: Boolean, default: false },
     orderId: { type: String },
   },

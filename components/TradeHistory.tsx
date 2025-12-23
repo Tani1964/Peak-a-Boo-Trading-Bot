@@ -62,8 +62,17 @@ export default function TradeHistory({ symbol, refreshKey, refreshInterval = 0 }
             side: 'buy' | 'sell';
             quantity: number;
             price: number;
-            status: 'pending' | 'filled' | 'cancelled' | 'rejected';
+            status: 'pending' | 'filled' | 'cancelled' | 'rejected' | 'blocked';
             portfolioValue?: number;
+            cash?: number;
+            buyingPower?: number;
+            equity?: number;
+            totalValue?: number;
+            profitLoss?: number;
+            profitLossPercent?: number;
+            orderId?: string;
+            signalId?: string;
+            rejectionReason?: string;
           }) => (
             <div
               key={trade._id}
@@ -105,16 +114,66 @@ export default function TradeHistory({ symbol, refreshKey, refreshInterval = 0 }
                         ? 'text-green-700 bg-green-50'
                         : trade.status === 'pending'
                         ? 'text-yellow-700 bg-yellow-50'
-                        : 'text-red-700 bg-red-50'
+                        : (trade.status === 'blocked' || trade.status === 'rejected')
+                        ? 'text-red-700 bg-red-50'
+                        : 'text-orange-700 bg-orange-50'
                     }`}
                   >
                     {trade.status}
                   </span>
                 </div>
+                {trade.rejectionReason && (
+                  <div className="flex flex-col gap-1 pt-2 border-t border-gray-200">
+                    <span className="text-gray-600 font-medium text-xs">Rejection Reason</span>
+                    <span className="text-red-600 text-sm font-medium">{trade.rejectionReason}</span>
+                  </div>
+                )}
+                <div className="flex justify-between items-center">
+                  <span className="text-gray-600 font-medium text-sm">Total Value</span>
+                  <span className="font-bold text-base text-gray-900">
+                    ${(trade.totalValue || trade.price * trade.quantity).toFixed(2)}
+                  </span>
+                </div>
+                {trade.profitLoss !== undefined && trade.profitLoss !== null && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600 font-medium text-sm">Profit/Loss</span>
+                    <span className={`font-bold text-base ${trade.profitLoss >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                      {trade.profitLoss >= 0 ? '+' : ''}${trade.profitLoss.toFixed(2)}
+                      {trade.profitLossPercent !== undefined && trade.profitLossPercent !== null && (
+                        <span className="ml-2 text-sm">
+                          ({trade.profitLossPercent >= 0 ? '+' : ''}{trade.profitLossPercent.toFixed(2)}%)
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                )}
                 {trade.portfolioValue && (
                   <div className="flex justify-between items-center">
                     <span className="text-gray-600 font-medium text-sm">Portfolio Value</span>
                     <span className="font-bold text-base text-gray-900">${trade.portfolioValue.toFixed(2)}</span>
+                  </div>
+                )}
+                {trade.cash !== undefined && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600 font-medium text-sm">Cash</span>
+                    <span className="font-bold text-sm text-gray-700">${trade.cash.toFixed(2)}</span>
+                  </div>
+                )}
+                {trade.buyingPower !== undefined && (
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-600 font-medium text-sm">Buying Power</span>
+                    <span className="font-bold text-sm text-gray-700">${trade.buyingPower.toFixed(2)}</span>
+                  </div>
+                )}
+                {trade.orderId && (
+                  <div className="flex justify-between items-center pt-2 border-t border-gray-200">
+                    <span className="text-gray-600 font-medium text-xs">Order ID</span>
+                    <span className="font-mono text-xs text-gray-500 truncate max-w-[200px]">{trade.orderId}</span>
+                  </div>
+                )}
+                {!trade.orderId && (trade.status === 'blocked' || trade.status === 'rejected') && (
+                  <div className="pt-2 border-t border-gray-200">
+                    <span className="text-gray-500 font-medium text-xs">No Order ID (Trade Blocked/Rejected)</span>
                   </div>
                 )}
               </div>

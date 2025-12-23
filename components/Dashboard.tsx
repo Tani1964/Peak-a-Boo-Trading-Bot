@@ -10,6 +10,8 @@ import SignalHistory from './SignalHistory';
 import StrategyControl from './StrategyControl';
 import TradeHistory from './TradeHistory';
 import DataStatistics from './DataStatistics';
+import YouTubeStrategyExtractor from './YouTubeStrategyExtractor';
+import PerformanceGraph from './PerformanceGraph';
 
 interface DashboardProps {
   symbol: string;
@@ -134,11 +136,17 @@ export default function Dashboard({ symbol }: DashboardProps) {
         {/* Strategy Control */}
         <StrategyControl symbol={symbol} onRefresh={handleRefresh} />
 
+        {/* YouTube Strategy Extractor */}
+        <YouTubeStrategyExtractor />
+
         {/* Positions */}
         <Positions data={positionsData} />
 
         {/* Data Statistics */}
         <DataStatistics symbol={symbol} refreshKey={refreshKey} refreshInterval={refreshInterval} />
+
+        {/* Performance Graph */}
+        <PerformanceGraph symbol={symbol} refreshKey={refreshKey} refreshInterval={refreshInterval} />
 
         {/* History Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

@@ -82,32 +82,50 @@ export type Signal = 'BUY' | 'SELL' | 'HOLD';
 export function generateSignal(indicators: TechnicalIndicators): Signal {
   const { rsi, macd, macdSignal, macdHistogram } = indicators;
 
-  // AGGRESSIVE STRATEGY: More frequent signals to achieve 3x growth in 30 days
-  // Buy signals: Multiple conditions for more opportunities
-  // 1. RSI oversold (wider band: < 40 instead of < 30)
-  // 2. RSI neutral but MACD bullish (40-60 range)
-  // 3. Strong MACD bullish momentum
-  if (rsi < 40 && macd > macdSignal) {
+  // VERY AGGRESSIVE STRATEGY: Maximum trade frequency to achieve 3x growth in 30 days
+  // Goal: Generate as many profitable trades as possible
+  
+  // Buy signals: VERY WIDE bands for maximum opportunities
+  // 1. RSI oversold/neutral (very wide band: < 50 instead of < 30)
+  // 2. Any MACD bullish signal
+  // 3. Even slight bullish momentum
+  
+  // Primary BUY: RSI below 50 with any bullish MACD indication
+  if (rsi < 50 && macd > macdSignal) {
     return 'BUY';
   }
   
-  // Buy on MACD bullish crossover even with moderate RSI
-  if (rsi < 55 && macd > macdSignal && macdHistogram > 0) {
+  // BUY on any MACD bullish crossover (even with RSI up to 60)
+  if (rsi < 60 && macd > macdSignal && macdHistogram > 0) {
+    return 'BUY';
+  }
+  
+  // BUY on strong MACD histogram momentum (aggressive entry)
+  if (macdHistogram > 0 && macd > macdSignal && rsi < 65) {
     return 'BUY';
   }
 
-  // Sell signals: More aggressive exit conditions
-  // 1. RSI overbought (wider band: > 60 instead of > 70)
-  // 2. RSI neutral but MACD bearish (40-60 range)
-  // 3. Strong MACD bearish momentum
-  if (rsi > 60 && macd < macdSignal) {
+  // Sell signals: VERY WIDE bands for maximum opportunities
+  // 1. RSI overbought/neutral (very wide band: > 50 instead of > 70)
+  // 2. Any MACD bearish signal
+  // 3. Even slight bearish momentum
+  
+  // Primary SELL: RSI above 50 with any bearish MACD indication
+  if (rsi > 50 && macd < macdSignal) {
     return 'SELL';
   }
   
-  // Sell on MACD bearish crossover even with moderate RSI
-  if (rsi > 45 && macd < macdSignal && macdHistogram < 0) {
+  // SELL on any MACD bearish crossover (even with RSI down to 40)
+  if (rsi > 40 && macd < macdSignal && macdHistogram < 0) {
+    return 'SELL';
+  }
+  
+  // SELL on strong MACD histogram negative momentum (aggressive exit)
+  if (macdHistogram < 0 && macd < macdSignal && rsi > 35) {
     return 'SELL';
   }
 
+  // Minimize HOLD - only when truly neutral (very narrow range)
+  // This ensures we're almost always in a trade
   return 'HOLD';
 }

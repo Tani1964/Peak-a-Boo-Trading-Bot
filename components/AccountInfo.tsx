@@ -1,16 +1,21 @@
 'use client';
 
-interface AccountData {
-  success: boolean;
-  account?: {
-    status: string;
-    portfolioValue: number;
-    cash: number;
-    buyingPower: number;
-    equity: number;
-    dayTradeCount: number;
-  };
-}
+type AccountData =
+  | {
+      success: true;
+      account: {
+        status: string;
+        portfolioValue: number;
+        cash: number;
+        buyingPower: number;
+        equity: number;
+        dayTradeCount: number;
+      };
+    }
+  | {
+      success: false;
+      account?: never;
+    };
 
 interface AccountInfoProps {
   data: AccountData;

@@ -2,11 +2,14 @@ name: Auto Trade
 
 on:
   schedule:
-    # Run every weekday at 9:30 AM ET (14:30 UTC, market open time)
+    # Run every minute during market hours (9:30 AM - 4:00 PM ET) on weekdays
     # Note: GitHub Actions uses UTC time
-    # 9:30 AM ET = 14:30 UTC (during EST) or 13:30 UTC (during EDT)
-    # Using 13:30 UTC to cover EDT (Eastern Daylight Time)
-    - cron: '30 13 * * 1-5'  # Mon-Fri at 13:30 UTC (9:30 AM EDT / 8:30 AM EST)
+    # Market hours: 9:30 AM - 4:00 PM ET
+    # EST: 14:30 - 21:00 UTC | EDT: 13:30 - 20:00 UTC
+    # Using 13-21 UTC to cover both timezones (runs slightly before/after actual hours for safety)
+    # This ensures we don't miss any trades at market open/close
+    - cron: '* 13-20 * * 1-5'  # Every minute, Mon-Fri, 13:00-20:59 UTC
+    - cron: '* 21 * * 1-5'     # Every minute at 21:00 UTC (4:00 PM EST) to catch last trades
   
   # Allow manual trigger
   workflow_dispatch:
@@ -60,18 +63,16 @@ jobs:
           fail_count=0
           
           echo "📈 Trading $total_symbols symbol(s): ${SYMBOL_ARRAY[*]}"
+          echo "🔄 Running every 30 seconds to catch all trading opportunities"
           echo ""
           
-          for symbol in "${SYMBOL_ARRAY[@]}"; do
-            # Trim whitespace
-            symbol=$(echo "$symbol" | xargs)
-            
-            if [ -z "$symbol" ]; then
-              continue
-            fi
+          # Function to process a single symbol
+          process_symbol() {
+            local symbol=$1
+            local call_number=$2
             
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-            echo "📊 Processing symbol: $symbol"
+            echo "📊 Processing symbol: $symbol (Call #$call_number)"
             echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
             
             # Make the request to your API endpoint (with -L to follow redirects)
@@ -95,12 +96,10 @@ jobs:
             
             if [ "$http_code" -eq 401 ]; then
               echo "❌ Unauthorized. Check that AUTO_TRADE_SECRET matches your server's AUTO_TRADE_SECRET env var."
-              ((fail_count++))
-              continue
+              return 1
             elif [ "$http_code" -ne 200 ]; then
               echo "❌ Request failed with status $http_code for $symbol"
-              ((fail_count++))
-              continue
+              return 1
             fi
             
             # Check if the response indicates success
@@ -109,24 +108,56 @@ jobs:
             
             if [ "$skipped" = "true" ]; then
               echo "ℹ️ Trade skipped for $symbol (likely market is closed)"
+              return 0
             elif [ "$success" != "true" ]; then
               echo "⚠️ Trade may have failed or been skipped for $symbol"
-              ((fail_count++))
+              return 1
             else
               echo "✅ Auto trade completed successfully for $symbol"
               executed=$(echo "$body" | grep -o '"executed":[^,}]*' | grep -o 'true\|false' | head -1)
               if [ "$executed" = "true" ]; then
                 echo "✅ Trade was executed for $symbol"
-                ((success_count++))
+                return 0
               else
                 echo "ℹ️ Signal generated but trade not executed for $symbol (likely HOLD signal or already have position)"
-                ((success_count++))
+                return 0
               fi
             fi
-            
+          }
+          
+          # Process all symbols twice - once immediately, once after 30 seconds
+          # This ensures signals are generated every 30 seconds
+          for call_num in 1 2; do
             echo ""
-            # Small delay between symbols to avoid rate limits
-            sleep 2
+            echo "════════════════════════════════════════════"
+            echo "🔄 Signal Generation Call #$call_num"
+            echo "════════════════════════════════════════════"
+            echo ""
+            
+            for symbol in "${SYMBOL_ARRAY[@]}"; do
+              # Trim whitespace
+              symbol=$(echo "$symbol" | xargs)
+              
+              if [ -z "$symbol" ]; then
+                continue
+              fi
+              
+              if process_symbol "$symbol" "$call_num"; then
+                ((success_count++))
+              else
+                ((fail_count++))
+              fi
+              
+              echo ""
+              # Small delay between symbols to avoid rate limits
+              sleep 1
+            done
+            
+            # Wait 30 seconds before the second call (except after the last call)
+            if [ $call_num -eq 1 ]; then
+              echo "⏳ Waiting 30 seconds before next signal generation..."
+              sleep 30
+            fi
           done
           
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"

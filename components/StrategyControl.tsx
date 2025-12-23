@@ -46,6 +46,8 @@ export default function StrategyControl({ symbol, onRefresh }: StrategyControlPr
       }
 
       setResult(data.signal);
+      // Refresh the dashboard to show the new signal in history
+      onRefresh();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {

@@ -11,6 +11,7 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const { symbol = 'SPY' } = body;
+    const normalizedSymbol = symbol.toUpperCase().trim();
 
     // Check if market is open
     const clock = await alpaca.getClock();
@@ -27,7 +28,7 @@ export async function POST(request: NextRequest) {
     const startDate = new Date();
     startDate.setMonth(startDate.getMonth() - 6);
 
-    const historicalData = await fetchHistoricalData(symbol, startDate, endDate);
+    const historicalData = await fetchHistoricalData(normalizedSymbol, startDate, endDate);
 
     if (historicalData.length === 0) {
       return NextResponse.json(
@@ -60,12 +61,13 @@ export async function POST(request: NextRequest) {
     // Save signal to database
     const signalDoc = new Signal({
       timestamp: new Date(),
-      symbol,
+      symbol: normalizedSymbol,
       signal,
       closePrice: latestPrice,
       rsi: indicators.rsi,
       macd: indicators.macd,
       macdSignal: indicators.macdSignal,
+      macdHistogram: indicators.macdHistogram,
       executed: false,
     });
 
@@ -76,7 +78,7 @@ export async function POST(request: NextRequest) {
       signal: {
         id: signalDoc._id.toString(),
         timestamp: signalDoc.timestamp,
-        symbol,
+        symbol: normalizedSymbol,
         signal,
         closePrice: latestPrice,
         indicators: {
@@ -107,8 +109,9 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const limit = parseInt(searchParams.get('limit') || '50');
     const symbol = searchParams.get('symbol');
+    const normalizedSymbol = symbol ? symbol.toUpperCase().trim() : null;
 
-    const query = symbol ? { symbol } : {};
+    const query = normalizedSymbol ? { symbol: normalizedSymbol } : {};
     const signals = await Signal.find(query)
       .sort({ timestamp: -1 })
       .limit(limit)

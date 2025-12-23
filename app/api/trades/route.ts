@@ -9,8 +9,9 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const limit = parseInt(searchParams.get('limit') || '50');
     const symbol = searchParams.get('symbol');
+    const normalizedSymbol = symbol ? symbol.toUpperCase().trim() : null;
 
-    const query = symbol ? { symbol } : {};
+    const query = normalizedSymbol ? { symbol: normalizedSymbol } : {};
     const trades = await Trade.find(query)
       .sort({ timestamp: -1 })
       .limit(limit)

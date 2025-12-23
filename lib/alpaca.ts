@@ -1,19 +1,41 @@
 import Alpaca from '@alpacahq/alpaca-trade-api';
 
-const alpacaConfig = {
-  keyId: process.env.ALPACA_API_KEY || '',
-  secretKey: process.env.ALPACA_SECRET_KEY || '',
-  paper: process.env.ALPACA_BASE_URL?.includes('paper') ?? true,
-  baseUrl: process.env.ALPACA_BASE_URL || 'https://paper-api.alpaca.markets',
-};
+let alpacaInstance: Alpaca | null = null;
 
-if (!alpacaConfig.keyId || !alpacaConfig.secretKey) {
-  throw new Error('Alpaca API credentials not configured');
+function getAlpaca(): Alpaca {
+  if (!alpacaInstance) {
+    const alpacaConfig = {
+      keyId: process.env.ALPACA_API_KEY || '',
+      secretKey: process.env.ALPACA_SECRET_KEY || '',
+      paper: process.env.ALPACA_BASE_URL?.includes('paper') ?? true,
+      baseUrl: process.env.ALPACA_BASE_URL || 'https://paper-api.alpaca.markets',
+    };
+
+    if (!alpacaConfig.keyId || !alpacaConfig.secretKey) {
+      throw new Error('Alpaca API credentials not configured');
+    }
+
+    alpacaInstance = new Alpaca(alpacaConfig);
+  }
+
+  return alpacaInstance;
 }
 
-const alpaca = new Alpaca(alpacaConfig);
+// Export a Proxy that lazily initializes - this avoids throwing during module load
+// The Proxy will only initialize when a method is actually called
+const alpacaProxy = new Proxy({} as Alpaca, {
+  get(_target, prop: string | symbol) {
+    const instance = getAlpaca();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const value = (instance as any)[prop];
+    if (typeof value === 'function') {
+      return value.bind(instance);
+    }
+    return value;
+  },
+});
 
-export default alpaca;
+export default alpacaProxy;
 
 export interface AlpacaAccount {
   id: string;

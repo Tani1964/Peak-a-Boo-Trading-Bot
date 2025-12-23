@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { createTimeInTimezone, formatDateInTimezone } from '@/lib/date-utils';
 import { useTimezone } from '@/lib/timezone';
-import { formatDateInTimezone, createTimeInTimezone } from '@/lib/date-utils';
 import { formatInTimeZone } from 'date-fns-tz';
+import { useEffect, useState } from 'react';
 
 interface MarketStatusData {
   success: boolean;
@@ -41,7 +41,7 @@ export default function MarketStatus({ data }: MarketStatusProps) {
   }
 
   const { clock } = data;
-  const isOpen = clock.isOpen;
+  const isOpen = clock?.isOpen ?? false;
 
   // Get today's date components in ET timezone
   const nowETString = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
@@ -109,7 +109,7 @@ export default function MarketStatus({ data }: MarketStatusProps) {
           </div>
         </div>
 
-        {!isOpen && clock.nextOpen && (
+        {!isOpen && clock?.nextOpen && (
           <div className="flex justify-between items-center py-3 bg-blue-50 -mx-4 px-4 rounded-lg">
             <span className="text-gray-700 font-medium text-base">Next Open</span>
             <span className="font-bold text-blue-700 text-base">
@@ -117,7 +117,7 @@ export default function MarketStatus({ data }: MarketStatusProps) {
             </span>
           </div>
         )}
-        {isOpen && clock.nextClose && (
+        {isOpen && clock?.nextClose && (
           <div className="flex justify-between items-center py-3 bg-orange-50 -mx-4 px-4 rounded-lg">
             <span className="text-gray-700 font-medium text-base">Closes At</span>
             <span className="font-bold text-orange-700 text-base">
