@@ -1,8 +1,7 @@
 import alpaca from '@/lib/alpaca';
-import connectDB from '@/lib/mongodb';
 import { NextRequest, NextResponse } from 'next/server';
 
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
     const clock = await alpaca.getClock();
 

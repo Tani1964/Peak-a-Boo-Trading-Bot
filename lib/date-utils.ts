@@ -1,5 +1,4 @@
-import { formatInTimeZone, toZonedTime, fromZonedTime } from 'date-fns-tz';
-import { format } from 'date-fns';
+import { formatInTimeZone, fromZonedTime } from 'date-fns-tz';
 
 export function formatDateInTimezone(
   date: Date | string,

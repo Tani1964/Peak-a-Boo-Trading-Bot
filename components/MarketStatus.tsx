@@ -49,7 +49,7 @@ export default function MarketStatus({ data }: MarketStatusProps) {
   try {
     marketOpenET = createTimeInTimezone(year, month, day, 9, 30, 'America/New_York');
     marketCloseET = createTimeInTimezone(year, month, day, 16, 0, 'America/New_York');
-  } catch (error) {
+  } catch {
     // Fallback: use a simpler approach if the function fails
     const todayStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     marketOpenET = new Date(`${todayStr}T09:30:00-05:00`); // ET is UTC-5

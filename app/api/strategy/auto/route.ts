@@ -120,7 +120,7 @@ export async function POST(request: NextRequest) {
         let currentPosition = null;
         try {
           currentPosition = await alpaca.getPosition(symbol);
-        } catch (error) {
+        } catch {
           // No position exists
         }
 

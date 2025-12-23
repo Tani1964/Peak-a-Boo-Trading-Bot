@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import useSWR from 'swr';
 import { useTimezone, TIMEZONES } from '@/lib/timezone';
 import AccountInfo from './AccountInfo';
