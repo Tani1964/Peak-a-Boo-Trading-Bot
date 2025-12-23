@@ -11,10 +11,10 @@ on:
   # Allow manual trigger
   workflow_dispatch:
     inputs:
-      symbol:
-        description: 'Stock symbol to trade'
+      symbols:
+        description: 'Comma-separated stock symbols (e.g., SPY,QQQ,AAPL) or leave empty to use TRADING_SYMBOLS secret'
         required: false
-        default: 'SPY'
+        default: ''
 
 jobs:
   trade:
@@ -24,10 +24,11 @@ jobs:
         env:
           APP_URL: ${{ secrets.APP_URL }}
           API_SECRET: ${{ secrets.AUTO_TRADE_SECRET }}
-          SYMBOL: ${{ github.event.inputs.symbol || 'SPY' }}
+          # Get symbols from input, or from secret, or default to SPY
+          SYMBOLS_INPUT: ${{ github.event.inputs.symbols }}
+          SYMBOLS_SECRET: ${{ secrets.TRADING_SYMBOLS }}
         run: |
           echo "🚀 Triggering auto trade at $(date)"
-          echo "Symbol: $SYMBOL"
           echo "App URL: $APP_URL"
           
           if [ -z "$APP_URL" ]; then
@@ -35,53 +36,108 @@ jobs:
             exit 1
           fi
           
+          # Determine which symbols to trade
+          if [ -n "$SYMBOLS_INPUT" ]; then
+            SYMBOLS="$SYMBOLS_INPUT"
+            echo "📊 Using symbols from workflow input: $SYMBOLS"
+          elif [ -n "$SYMBOLS_SECRET" ]; then
+            SYMBOLS="$SYMBOLS_SECRET"
+            echo "📊 Using symbols from TRADING_SYMBOLS secret: $SYMBOLS"
+          else
+            SYMBOLS="SPY"
+            echo "📊 No symbols configured, using default: $SYMBOLS"
+            echo "ℹ️  Tip: Set TRADING_SYMBOLS secret (comma-separated) to trade multiple symbols automatically"
+          fi
+          
           if [ -z "$API_SECRET" ]; then
             echo "⚠️ AUTO_TRADE_SECRET not set. Endpoint may require authentication."
           fi
           
-          # Make the request to your API endpoint (with -L to follow redirects)
-          if [ -z "$API_SECRET" ]; then
-            response=$(curl -s -L -w "\n%{http_code}" -X POST "$APP_URL/api/strategy/auto" \
-              -H "Content-Type: application/json" \
-              -d "{\"symbol\": \"$SYMBOL\", \"autoExecute\": true}")
-          else
-            response=$(curl -s -L -w "\n%{http_code}" -X POST "$APP_URL/api/strategy/auto" \
-              -H "Content-Type: application/json" \
-              -H "x-api-secret: $API_SECRET" \
-              -d "{\"symbol\": \"$SYMBOL\", \"autoExecute\": true}")
-          fi
+          # Convert comma-separated string to array and loop through symbols
+          IFS=',' read -ra SYMBOL_ARRAY <<< "$SYMBOLS"
+          total_symbols=${#SYMBOL_ARRAY[@]}
+          success_count=0
+          fail_count=0
           
-          http_code=$(echo "$response" | tail -n1)
-          body=$(echo "$response" | sed '$d')
+          echo "📈 Trading $total_symbols symbol(s): ${SYMBOL_ARRAY[*]}"
+          echo ""
           
-          echo "Response code: $http_code"
-          echo "Response body:"
-          echo "$body" | jq '.' 2>/dev/null || echo "$body"
-          
-          if [ "$http_code" -eq 401 ]; then
-            echo "❌ Unauthorized. Check that AUTO_TRADE_SECRET matches your server's AUTO_TRADE_SECRET env var."
-            exit 1
-          elif [ "$http_code" -ne 200 ]; then
-            echo "❌ Request failed with status $http_code"
-            exit 1
-          fi
-          
-          # Check if the response indicates success
-          success=$(echo "$body" | grep -o '"success":[^,}]*' | grep -o 'true\|false' | head -1)
-          skipped=$(echo "$body" | grep -o '"skipped":[^,}]*' | grep -o 'true\|false' | head -1)
-          
-          if [ "$skipped" = "true" ]; then
-            echo "ℹ️ Trade skipped (likely market is closed)"
-          elif [ "$success" != "true" ]; then
-            echo "⚠️ Trade may have failed or been skipped"
-            echo "$body"
-          else
-            echo "✅ Auto trade completed successfully"
-            executed=$(echo "$body" | grep -o '"executed":[^,}]*' | grep -o 'true\|false' | head -1)
-            if [ "$executed" = "true" ]; then
-              echo "✅ Trade was executed"
-            else
-              echo "ℹ️ Signal generated but trade not executed (likely HOLD signal or already have position)"
+          for symbol in "${SYMBOL_ARRAY[@]}"; do
+            # Trim whitespace
+            symbol=$(echo "$symbol" | xargs)
+            
+            if [ -z "$symbol" ]; then
+              continue
             fi
+            
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            echo "📊 Processing symbol: $symbol"
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            
+            # Make the request to your API endpoint (with -L to follow redirects)
+            if [ -z "$API_SECRET" ]; then
+              response=$(curl -s -L -w "\n%{http_code}" -X POST "$APP_URL/api/strategy/auto" \
+                -H "Content-Type: application/json" \
+                -d "{\"symbol\": \"$symbol\", \"autoExecute\": true}")
+            else
+              response=$(curl -s -L -w "\n%{http_code}" -X POST "$APP_URL/api/strategy/auto" \
+                -H "Content-Type: application/json" \
+                -H "x-api-secret: $API_SECRET" \
+                -d "{\"symbol\": \"$symbol\", \"autoExecute\": true}")
+            fi
+            
+            http_code=$(echo "$response" | tail -n1)
+            body=$(echo "$response" | sed '$d')
+            
+            echo "Response code: $http_code"
+            echo "Response body:"
+            echo "$body" | jq '.' 2>/dev/null || echo "$body"
+            
+            if [ "$http_code" -eq 401 ]; then
+              echo "❌ Unauthorized. Check that AUTO_TRADE_SECRET matches your server's AUTO_TRADE_SECRET env var."
+              ((fail_count++))
+              continue
+            elif [ "$http_code" -ne 200 ]; then
+              echo "❌ Request failed with status $http_code for $symbol"
+              ((fail_count++))
+              continue
+            fi
+            
+            # Check if the response indicates success
+            success=$(echo "$body" | grep -o '"success":[^,}]*' | grep -o 'true\|false' | head -1)
+            skipped=$(echo "$body" | grep -o '"skipped":[^,}]*' | grep -o 'true\|false' | head -1)
+            
+            if [ "$skipped" = "true" ]; then
+              echo "ℹ️ Trade skipped for $symbol (likely market is closed)"
+            elif [ "$success" != "true" ]; then
+              echo "⚠️ Trade may have failed or been skipped for $symbol"
+              ((fail_count++))
+            else
+              echo "✅ Auto trade completed successfully for $symbol"
+              executed=$(echo "$body" | grep -o '"executed":[^,}]*' | grep -o 'true\|false' | head -1)
+              if [ "$executed" = "true" ]; then
+                echo "✅ Trade was executed for $symbol"
+                ((success_count++))
+              else
+                echo "ℹ️ Signal generated but trade not executed for $symbol (likely HOLD signal or already have position)"
+                ((success_count++))
+              fi
+            fi
+            
+            echo ""
+            # Small delay between symbols to avoid rate limits
+            sleep 2
+          done
+          
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          echo "📊 Summary:"
+          echo "   Total symbols: $total_symbols"
+          echo "   Successful: $success_count"
+          echo "   Failed: $fail_count"
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          
+          if [ $fail_count -gt 0 ]; then
+            echo "⚠️ Some trades failed"
+            exit 1
           fi
 
