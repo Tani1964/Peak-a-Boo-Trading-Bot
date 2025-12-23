@@ -15,6 +15,40 @@ const MAX_POSITION_SIZE_PERCENT = 0.95; // Maximum 95% when way behind on goals
 const MIN_POSITION_SIZE = 1; // Minimum 1 share
 
 /**
+ * Map Alpaca order status to Trade model status enum
+ * Alpaca statuses: new, pending_new, accepted, pending_cancel, pending_replace, 
+ *                  filled, partially_filled, canceled, expired, replaced, rejected
+ * Trade statuses: pending, filled, cancelled, rejected, blocked
+ */
+function mapAlpacaStatusToTradeStatus(alpacaStatus: string): 'pending' | 'filled' | 'cancelled' | 'rejected' | 'blocked' {
+  const status = alpacaStatus.toLowerCase();
+  
+  // Filled statuses
+  if (status === 'filled' || status === 'partially_filled') {
+    return 'filled';
+  }
+  
+  // Cancelled statuses
+  if (status === 'canceled' || status === 'cancelled' || status === 'expired' || status === 'replaced') {
+    return 'cancelled';
+  }
+  
+  // Rejected status
+  if (status === 'rejected' || status === 'failed') {
+    return 'rejected';
+  }
+  
+  // All pending/new/accepted statuses map to pending
+  if (status === 'new' || status === 'pending_new' || status === 'accepted' || 
+      status === 'pending_cancel' || status === 'pending_replace' || status === 'pending') {
+    return 'pending';
+  }
+  
+  // Default to pending for unknown statuses
+  return 'pending';
+}
+
+/**
  * Calculate position size based on account value and growth goals
  * Goal: Triple account in 30 days requires VERY aggressive position sizing
  * Dynamically adjusts based on progress toward goal
@@ -334,6 +368,9 @@ export async function POST(request: NextRequest) {
         profitLossPercent = avgEntryPrice > 0 ? ((tradePrice - avgEntryPrice) / avgEntryPrice) * 100 : 0;
       }
       
+      // Map Alpaca order status to Trade model status
+      const tradeStatus = mapAlpacaStatusToTradeStatus(orderData.status);
+      
       // Save trade to database with enhanced data
       const trade = new Trade({
         timestamp: new Date(),
@@ -342,7 +379,7 @@ export async function POST(request: NextRequest) {
         side: signal.toLowerCase() as 'buy' | 'sell',
         quantity: positionSize,
         price: tradePrice,
-        status: orderData.status as 'pending' | 'filled' | 'cancelled' | 'rejected',
+        status: tradeStatus,
         filledAt: orderData.filled_at ? new Date(orderData.filled_at) : undefined,
         portfolioValue: updatedValue,
         cash: updatedCash,
@@ -352,7 +389,7 @@ export async function POST(request: NextRequest) {
         profitLoss,
         profitLossPercent,
         signalId: signalId || undefined,
-        rejectionReason: orderData.status === 'rejected' ? 'Order rejected by broker' : undefined,
+        rejectionReason: tradeStatus === 'rejected' ? 'Order rejected by broker' : undefined,
       });
 
       await trade.save();

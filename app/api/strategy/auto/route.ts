@@ -9,6 +9,40 @@ import { NextRequest, NextResponse } from 'next/server';
 const POSITION_SIZE = 1;
 
 /**
+ * Map Alpaca order status to Trade model status enum
+ * Alpaca statuses: new, pending_new, accepted, pending_cancel, pending_replace, 
+ *                  filled, partially_filled, canceled, expired, replaced, rejected
+ * Trade statuses: pending, filled, cancelled, rejected, blocked
+ */
+function mapAlpacaStatusToTradeStatus(alpacaStatus: string): 'pending' | 'filled' | 'cancelled' | 'rejected' | 'blocked' {
+  const status = alpacaStatus.toLowerCase();
+  
+  // Filled statuses
+  if (status === 'filled' || status === 'partially_filled') {
+    return 'filled';
+  }
+  
+  // Cancelled statuses
+  if (status === 'canceled' || status === 'cancelled' || status === 'expired' || status === 'replaced') {
+    return 'cancelled';
+  }
+  
+  // Rejected status
+  if (status === 'rejected' || status === 'failed') {
+    return 'rejected';
+  }
+  
+  // All pending/new/accepted statuses map to pending
+  if (status === 'new' || status === 'pending_new' || status === 'accepted' || 
+      status === 'pending_cancel' || status === 'pending_replace' || status === 'pending') {
+    return 'pending';
+  }
+  
+  // Default to pending for unknown statuses
+  return 'pending';
+}
+
+/**
  * Automated trading endpoint that analyzes and executes trades
  * Designed to be called by scheduled services (GitHub Actions, cron jobs, etc.)
  * 
@@ -258,6 +292,9 @@ export async function POST(request: NextRequest) {
           const tradePrice = parseFloat(orderData.filled_avg_price || '0');
           const tradeValue = POSITION_SIZE * tradePrice;
           
+          // Map Alpaca order status to Trade model status
+          const tradeStatus = mapAlpacaStatusToTradeStatus(orderData.status);
+          
           // Save trade to database with enhanced data
           const trade = new Trade({
             timestamp: new Date(),
@@ -266,7 +303,7 @@ export async function POST(request: NextRequest) {
             side: signal.toLowerCase() as 'buy' | 'sell',
             quantity: POSITION_SIZE,
             price: tradePrice,
-            status: orderData.status as 'pending' | 'filled' | 'cancelled' | 'rejected',
+            status: tradeStatus,
             filledAt: orderData.filled_at ? new Date(orderData.filled_at) : new Date(),
             portfolioValue: updatedPortfolioValue,
             cash: updatedCash,
