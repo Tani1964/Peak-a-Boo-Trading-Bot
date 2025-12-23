@@ -1,9 +1,9 @@
+import alpaca, { AlpacaOrder, AlpacaPosition } from '@/lib/alpaca';
 import { calculateIndicators, DEFAULT_CONFIG, generateSignal } from '@/lib/indicators';
 import connectDB from '@/lib/mongodb';
 import { fetchHistoricalData } from '@/lib/yahoo-finance';
 import { Signal } from '@/models/Signal';
 import { Trade } from '@/models/Trade';
-import alpaca, { AlpacaPosition, AlpacaOrder } from '@/lib/alpaca';
 import { NextRequest, NextResponse } from 'next/server';
 
 const POSITION_SIZE = 1;
@@ -92,7 +92,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Generate trading signal
-    const signal = generateSignal(indicators);
+    const signal = generateSignal(indicators) as 'BUY' | 'SELL' | 'HOLD';
     const latestPrice = closePrices[closePrices.length - 1];
     
     console.log(`📈 ${normalizedSymbol}: Signal=${signal}, RSI=${indicators.rsi.toFixed(2)}, MACD=${indicators.macd.toFixed(4)}, Price=$${latestPrice.toFixed(2)}`);
@@ -193,7 +193,7 @@ export async function POST(request: NextRequest) {
     if (signal === 'HOLD') {
       console.log(`⏸️  ${normalizedSymbol}: HOLD signal - no trade executed`);
       result.message = 'HOLD signal - no action taken';
-    } else if (autoExecute && signal !== 'HOLD') {
+    } else if (autoExecute) {
       console.log(`🚀 ${normalizedSymbol}: ${signal} signal - attempting to execute trade...`);
       try {
         // Check current position
