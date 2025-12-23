@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     // Build queries
     const tradeQuery: FilterQuery<ITrade> = startDate ? { timestamp: { $gte: startDate } } : {};
     const signalQuery: FilterQuery<ISignal> = startDate ? { timestamp: { $gte: startDate } } : {};
-    const snapshotQuery: FilterQuery<any> = startDate ? { timestamp: { $gte: startDate } } : {};
+    const snapshotQuery: FilterQuery<{ timestamp: Date }> = startDate ? { timestamp: { $gte: startDate } } : {};
     
     if (symbol) {
       tradeQuery.symbol = symbol;

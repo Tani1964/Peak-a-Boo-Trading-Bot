@@ -51,6 +51,7 @@ export default function PerformanceGraph({
   days = 3650 // Default to 10 years to fetch all available data
 }: PerformanceGraphProps) {
   const { timezone } = useTimezone();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const portfolioChartRef = useRef<any>(null);
   const { data, error } = useSWR(
     `/api/performance?symbol=${symbol}&days=${days}&refresh=${refreshKey}`,
@@ -62,7 +63,13 @@ export default function PerformanceGraph({
 
   const handleResetZoom = () => {
     if (portfolioChartRef.current) {
-      portfolioChartRef.current.resetZoom();
+      const chart = portfolioChartRef.current;
+      // Access the Chart.js instance
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const chartInstance = (chart as any).chartInstance || (chart as any);
+      if (chartInstance && typeof chartInstance.resetZoom === 'function') {
+        chartInstance.resetZoom();
+      }
     }
   };
 
@@ -114,22 +121,30 @@ export default function PerformanceGraph({
       {
         label: 'Portfolio Value',
         data: portfolioDataPoints,
-        borderColor: 'rgb(59, 130, 246)',
-        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+        borderColor: '#3b82f6',
+        backgroundColor: 'rgba(59, 130, 246, 0.05)',
         fill: true,
-        tension: 0.4,
-        pointRadius: 2,
-        pointHoverRadius: 5,
+        tension: 0.1,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        borderWidth: 2,
+        pointHoverBorderWidth: 2,
+        pointHoverBackgroundColor: '#3b82f6',
+        pointHoverBorderColor: '#ffffff',
       },
       {
         label: 'Equity',
         data: equityDataPoints,
-        borderColor: 'rgb(34, 197, 94)',
-        backgroundColor: 'rgba(34, 197, 94, 0.1)',
+        borderColor: '#22c55e',
+        backgroundColor: 'rgba(34, 197, 94, 0.05)',
         fill: true,
-        tension: 0.4,
-        pointRadius: 2,
-        pointHoverRadius: 5,
+        tension: 0.1,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        borderWidth: 2,
+        pointHoverBorderWidth: 2,
+        pointHoverBackgroundColor: '#22c55e',
+        pointHoverBorderColor: '#ffffff',
       },
     ],
   };
@@ -197,14 +212,45 @@ export default function PerformanceGraph({
     plugins: {
       legend: {
         position: 'top' as const,
+        labels: {
+          usePointStyle: true,
+          padding: 15,
+          font: {
+            size: 12,
+            weight: 600,
+          },
+          color: '#1f2937',
+        },
       },
       tooltip: {
         mode: 'index' as const,
         intersect: false,
+        backgroundColor: 'rgba(17, 24, 39, 0.95)',
+        padding: 12,
+        titleFont: {
+          size: 13,
+          weight: 'bold' as const,
+        },
+        bodyFont: {
+          size: 12,
+        },
+        titleColor: '#f9fafb',
+        bodyColor: '#f9fafb',
+        borderColor: 'rgba(59, 130, 246, 0.5)',
+        borderWidth: 1,
+        cornerRadius: 8,
+        displayColors: true,
         callbacks: {
-          title: (context: any) => {
-            const date = new Date(context[0].parsed.x);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          title: (tooltipItems: any[]) => {
+            const date = new Date(tooltipItems[0].parsed.x);
             return formatDateInTimezone(date, timezone, 'MMM dd, yyyy HH:mm');
+          },
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          label: (context: any) => {
+            const label = context.dataset.label || '';
+            const value = context.parsed.y;
+            return `${label}: $${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
           },
         },
       },
@@ -212,6 +258,7 @@ export default function PerformanceGraph({
         zoom: {
           wheel: {
             enabled: true,
+            speed: 0.1,
           },
           pinch: {
             enabled: true,
@@ -221,6 +268,7 @@ export default function PerformanceGraph({
         pan: {
           enabled: true,
           mode: 'x' as const,
+          threshold: 10,
         },
       },
     },
@@ -229,9 +277,9 @@ export default function PerformanceGraph({
         type: 'time' as const,
         time: {
           displayFormats: {
-            millisecond: 'MMM dd HH:mm',
-            second: 'MMM dd HH:mm',
-            minute: 'MMM dd HH:mm',
+            millisecond: 'HH:mm:ss',
+            second: 'HH:mm:ss',
+            minute: 'HH:mm',
             hour: 'MMM dd HH:mm',
             day: 'MMM dd',
             week: 'MMM dd',
@@ -243,12 +291,52 @@ export default function PerformanceGraph({
         },
         display: true,
         grid: {
-          display: false,
+          display: true,
+          color: 'rgba(229, 231, 235, 0.5)',
+          lineWidth: 1,
+          drawBorder: false,
+        },
+        ticks: {
+          color: '#6b7280',
+          font: {
+            size: 11,
+            weight: 500,
+          },
+          padding: 8,
+        },
+        border: {
+          display: true,
+          color: '#e5e7eb',
+          width: 1,
         },
       },
       y: {
         display: true,
         beginAtZero: false,
+        position: 'right' as const,
+        grid: {
+          display: true,
+          color: 'rgba(229, 231, 235, 0.5)',
+          lineWidth: 1,
+          drawBorder: false,
+        },
+        ticks: {
+          color: '#6b7280',
+          font: {
+            size: 11,
+            weight: 500,
+          },
+          padding: 8,
+          callback: function(value: number | string) {
+            const numValue = typeof value === 'string' ? parseFloat(value) : value;
+            return '$' + numValue.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+          },
+        },
+        border: {
+          display: true,
+          color: '#e5e7eb',
+          width: 1,
+        },
       },
     },
   };
@@ -303,7 +391,7 @@ export default function PerformanceGraph({
         {/* Portfolio Value Chart */}
         {chartData.portfolio.length > 0 && (
           <div>
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-4 flex-wrap gap-4">
               <h3 className="text-lg font-bold text-gray-900">Portfolio Value Over Time</h3>
               <button
                 onClick={handleResetZoom}
@@ -312,7 +400,7 @@ export default function PerformanceGraph({
                 🔍 Reset Zoom
               </button>
             </div>
-            <div className="h-64">
+            <div className="h-[600px] bg-white rounded-lg border border-gray-200 p-4 shadow-sm">
               <Line 
                 ref={portfolioChartRef}
                 data={portfolioData} 
@@ -320,7 +408,7 @@ export default function PerformanceGraph({
               />
             </div>
             <div className="mt-2 text-xs text-gray-500">
-              💡 Use mouse wheel to zoom, drag to pan, or click Reset Zoom to view all data
+              💡 Use mouse wheel to zoom, click and drag to pan
             </div>
           </div>
         )}
