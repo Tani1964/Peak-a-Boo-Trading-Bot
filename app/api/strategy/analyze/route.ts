@@ -74,7 +74,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       signal: {
-        id: signalDoc._id,
+        id: signalDoc._id.toString(),
         timestamp: signalDoc.timestamp,
         symbol,
         signal,

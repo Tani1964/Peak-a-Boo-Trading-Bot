@@ -126,7 +126,7 @@ export async function POST(request: NextRequest) {
     const result: AutoTradeResult = {
       success: true,
       signal: {
-        id: signalDoc._id,
+        id: signalDoc._id.toString(),
         timestamp: signalDoc.timestamp,
         symbol,
         signal,
