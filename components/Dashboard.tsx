@@ -9,6 +9,7 @@ import Positions from './Positions';
 import SignalHistory from './SignalHistory';
 import StrategyControl from './StrategyControl';
 import TradeHistory from './TradeHistory';
+import DataStatistics from './DataStatistics';
 
 interface DashboardProps {
   symbol: string;
@@ -136,10 +137,13 @@ export default function Dashboard({ symbol }: DashboardProps) {
         {/* Positions */}
         <Positions data={positionsData} />
 
+        {/* Data Statistics */}
+        <DataStatistics symbol={symbol} refreshKey={refreshKey} refreshInterval={refreshInterval} />
+
         {/* History Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <SignalHistory symbol={symbol} refreshKey={refreshKey} />
-          <TradeHistory symbol={symbol} refreshKey={refreshKey} />
+          <SignalHistory symbol={symbol} refreshKey={refreshKey} refreshInterval={refreshInterval} />
+          <TradeHistory symbol={symbol} refreshKey={refreshKey} refreshInterval={refreshInterval} />
         </div>
       </div>
     </div>

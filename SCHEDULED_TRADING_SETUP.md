@@ -32,13 +32,18 @@ Your Next.js app has API endpoints that can be called on a schedule to automatic
 3. **In GitHub**:
    - Go to your repository
    - Settings → Secrets and variables → Actions
-   - Click "New repository secret"
-   - Name: `AUTO_TRADE_SECRET`
-   - Value: (paste your secret)
-
-4. **Add GitHub Secret for App URL** (optional but recommended):
-   - Create another secret: `APP_URL`
+   - Click "New repository secret" and add these secrets:
+   
+   **Secret 1: `AUTO_TRADE_SECRET`**
+   - Value: (paste your generated secret)
+   
+   **Secret 2: `APP_URL`** (required)
    - Value: `https://your-app.vercel.app` (your deployed URL)
+   
+   **Secret 3: `TRADING_SYMBOLS`** (optional - for automatic multi-symbol trading)
+   - Value: Comma-separated list of symbols, e.g., `SPY,QQQ,AAPL,MSFT,GOOGL`
+   - If not set, it will default to `SPY`
+   - This allows the workflow to automatically trade multiple symbols without manual input
 
 ### Step 2: Update the Workflow File
 

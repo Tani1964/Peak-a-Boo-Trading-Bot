@@ -7,15 +7,19 @@ import { formatDateInTimezone } from '@/lib/date-utils';
 interface SignalHistoryProps {
   symbol: string;
   refreshKey: number;
+  refreshInterval?: number;
 }
 
 const fetcher = (url: string) => fetch(url).then((res) => res.json());
 
-export default function SignalHistory({ symbol, refreshKey }: SignalHistoryProps) {
+export default function SignalHistory({ symbol, refreshKey, refreshInterval = 0 }: SignalHistoryProps) {
   const { timezone } = useTimezone();
   const { data, error } = useSWR(
     `/api/strategy/analyze?symbol=${symbol}&limit=20&refresh=${refreshKey}`,
-    fetcher
+    fetcher,
+    {
+      refreshInterval: refreshInterval,
+    }
   );
 
   if (error) {
