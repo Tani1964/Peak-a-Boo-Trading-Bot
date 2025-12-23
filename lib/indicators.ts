@@ -80,15 +80,32 @@ export function calculateIndicators(
 export type Signal = 'BUY' | 'SELL' | 'HOLD';
 
 export function generateSignal(indicators: TechnicalIndicators): Signal {
-  const { rsi, macd, macdSignal } = indicators;
+  const { rsi, macd, macdSignal, macdHistogram } = indicators;
 
-  // Buy signal: RSI oversold + MACD bullish crossover
-  if (rsi < 30 && macd > macdSignal) {
+  // AGGRESSIVE STRATEGY: More frequent signals to achieve 3x growth in 30 days
+  // Buy signals: Multiple conditions for more opportunities
+  // 1. RSI oversold (wider band: < 40 instead of < 30)
+  // 2. RSI neutral but MACD bullish (40-60 range)
+  // 3. Strong MACD bullish momentum
+  if (rsi < 40 && macd > macdSignal) {
+    return 'BUY';
+  }
+  
+  // Buy on MACD bullish crossover even with moderate RSI
+  if (rsi < 55 && macd > macdSignal && macdHistogram > 0) {
     return 'BUY';
   }
 
-  // Sell signal: RSI overbought + MACD bearish crossover
-  if (rsi > 70 && macd < macdSignal) {
+  // Sell signals: More aggressive exit conditions
+  // 1. RSI overbought (wider band: > 60 instead of > 70)
+  // 2. RSI neutral but MACD bearish (40-60 range)
+  // 3. Strong MACD bearish momentum
+  if (rsi > 60 && macd < macdSignal) {
+    return 'SELL';
+  }
+  
+  // Sell on MACD bearish crossover even with moderate RSI
+  if (rsi > 45 && macd < macdSignal && macdHistogram < 0) {
     return 'SELL';
   }
 

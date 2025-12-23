@@ -16,7 +16,11 @@ ALPACA_BASE_URL = "https://paper-api.alpaca.markets"  # Paper trading (demo)
 
 # Trading Parameters
 SYMBOL = "SPY"  # S&P 500 ETF
-POSITION_SIZE = 1  # Number of shares
+# Goal: Triple account in 30 days (3x growth)
+GROWTH_TARGET = 3.0  # 3x = 300% return
+TARGET_DAYS = 30
+POSITION_SIZE_PERCENT = 0.5  # Use 50% of buying power per trade (aggressive)
+MIN_POSITION_SIZE = 1  # Minimum 1 share
 
 # Strategy Parameters
 RSI_PERIOD = 14
@@ -74,13 +78,42 @@ def close_all_positions(symbol):
         return False
 
 
+def calculate_position_size(symbol, buying_power):
+    """Calculate position size based on buying power and growth goals"""
+    try:
+        # Get current price
+        bars = api.get_bars(symbol, "1Day", limit=1)
+        if not bars or len(bars) == 0:
+            # Fallback: use a reasonable default price estimate (SPY is typically $400-600)
+            return max(MIN_POSITION_SIZE, int((buying_power * POSITION_SIZE_PERCENT) / 500))
+        
+        current_price = float(bars[-1].c)
+        if current_price <= 0:
+            return MIN_POSITION_SIZE
+        
+        # Calculate position size: use percentage of buying power
+        position_value = buying_power * POSITION_SIZE_PERCENT
+        shares = int(position_value / current_price)
+        
+        return max(MIN_POSITION_SIZE, shares)
+    except Exception as e:
+        print(f"⚠️  Error calculating position size: {e}")
+        # Fallback to conservative estimate
+        return max(MIN_POSITION_SIZE, int((buying_power * POSITION_SIZE_PERCENT) / 500))
+
+
 def place_order(signal, symbol):
-    """Place order based on signal"""
+    """Place order based on signal with dynamic position sizing"""
     if api is None:
         print("❌ Alpaca API not initialized")
         return False
 
     try:
+        # Get account info for position sizing
+        account = api.get_account()
+        buying_power = float(account.buying_power)
+        portfolio_value = float(account.portfolio_value)
+        
         # Check current positions
         try:
             position = api.get_position(symbol)
@@ -88,21 +121,25 @@ def place_order(signal, symbol):
         except:
             current_qty = 0
 
+        # Calculate dynamic position size
+        position_size = calculate_position_size(symbol, buying_power)
+
         if signal == "BUY":
             if current_qty <= 0:
                 # Close any short position first
                 if current_qty < 0:
                     close_all_positions(symbol)
 
-                # Place buy order
+                # Place buy order with calculated position size
                 order = api.submit_order(
                     symbol=symbol,
-                    qty=POSITION_SIZE,
+                    qty=position_size,
                     side="buy",
                     type="market",
                     time_in_force="day",
                 )
-                print(f"✅ BUY order placed: {POSITION_SIZE} shares of {symbol}")
+                position_value = position_size * (float(api.get_bars(symbol, "1Day", limit=1)[-1].c) if api.get_bars(symbol, "1Day", limit=1) else 500)
+                print(f"✅ BUY order placed: {position_size} shares of {symbol} (~${position_value:.2f}, {POSITION_SIZE_PERCENT*100:.0f}% of buying power)")
                 return True
             else:
                 print(f"📊 Already holding {current_qty} shares of {symbol}")
@@ -113,15 +150,16 @@ def place_order(signal, symbol):
                 # Close long position
                 close_all_positions(symbol)
 
-                # Place sell (short) order
+                # Place sell (short) order with calculated position size
                 order = api.submit_order(
                     symbol=symbol,
-                    qty=POSITION_SIZE,
+                    qty=position_size,
                     side="sell",
                     type="market",
                     time_in_force="day",
                 )
-                print(f"✅ SELL order placed: {POSITION_SIZE} shares of {symbol}")
+                position_value = position_size * (float(api.get_bars(symbol, "1Day", limit=1)[-1].c) if api.get_bars(symbol, "1Day", limit=1) else 500)
+                print(f"✅ SELL order placed: {position_size} shares of {symbol} (~${position_value:.2f}, {POSITION_SIZE_PERCENT*100:.0f}% of buying power)")
                 return True
             else:
                 print("📊 No position to sell or already short")
@@ -173,15 +211,30 @@ def run_strategy():
     macd = ta.macd(data["Close"], fast=MACD_FAST, slow=MACD_SLOW, signal=MACD_SIGNAL)
     data["MACD"] = macd["MACD_12_26_9"]
     data["MACD_Signal"] = macd["MACDs_12_26_9"]
+    data["MACD_Histogram"] = data["MACD"] - data["MACD_Signal"]  # Calculate histogram
 
-    # Generate signal
+    # Generate signal - AGGRESSIVE STRATEGY for 3x growth in 30 days
     def generate_signal(row):
-        if row["RSI"] < 30 and row["MACD"] > row["MACD_Signal"]:
+        rsi = row["RSI"]
+        macd = row["MACD"]
+        macd_signal = row["MACD_Signal"]
+        macd_histogram = row["MACD_Histogram"]
+        
+        # More aggressive buy signals (wider RSI bands)
+        if rsi < 40 and macd > macd_signal:
             return "BUY"
-        elif row["RSI"] > 70 and row["MACD"] < row["MACD_Signal"]:
+        # Buy on MACD bullish crossover even with moderate RSI
+        if rsi < 55 and macd > macd_signal and macd_histogram > 0:
+            return "BUY"
+        
+        # More aggressive sell signals (wider RSI bands)
+        if rsi > 60 and macd < macd_signal:
             return "SELL"
-        else:
-            return "HOLD"
+        # Sell on MACD bearish crossover even with moderate RSI
+        if rsi > 45 and macd < macd_signal and macd_histogram < 0:
+            return "SELL"
+        
+        return "HOLD"
 
     data["Signal"] = data.apply(generate_signal, axis=1)
     latest_signal = data.iloc[-1]["Signal"]
@@ -201,12 +254,21 @@ def run_strategy():
     # Place order
     place_order(latest_signal, SYMBOL)
 
-    # Get current account status
+    # Get current account status and growth metrics
     try:
         account = api.get_account()
+        portfolio_value = float(account.portfolio_value)
         print("\n💼 Account Status:")
-        print(f"   Portfolio Value: ${float(account.portfolio_value):,.2f}")
+        print(f"   Portfolio Value: ${portfolio_value:,.2f}")
         print(f"   Cash: ${float(account.cash):,.2f}")
+        print(f"   Buying Power: ${float(account.buying_power):,.2f}")
+        
+        # Calculate growth goal progress (3x in 30 days)
+        # Note: This is a simplified version - in production, track initial value
+        daily_target = (GROWTH_TARGET ** (1/TARGET_DAYS)) - 1
+        print(f"\n🎯 Growth Goal: {GROWTH_TARGET}x in {TARGET_DAYS} days")
+        print(f"   Daily Target Return: {daily_target*100:.2f}%")
+        print(f"   Strategy: Aggressive position sizing ({POSITION_SIZE_PERCENT*100:.0f}% of buying power per trade)")
     except Exception as e:
         print(f"⚠️  Could not fetch account info: {e}")
 

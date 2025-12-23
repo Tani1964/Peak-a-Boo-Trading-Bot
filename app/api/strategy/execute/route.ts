@@ -2,9 +2,56 @@ import alpaca from '@/lib/alpaca';
 import connectDB from '@/lib/mongodb';
 import { Signal } from '@/models/Signal';
 import { Trade } from '@/models/Trade';
+import { AccountSnapshot } from '@/models/AccountSnapshot';
+import { fetchCurrentPrice } from '@/lib/yahoo-finance';
 import { NextRequest, NextResponse } from 'next/server';
 
-const POSITION_SIZE = 1;
+// Goal: Triple account in 30 days (3x growth)
+const GROWTH_TARGET = 3.0; // 3x = 300% return
+const TARGET_DAYS = 30;
+const DAILY_TARGET_RETURN = Math.pow(GROWTH_TARGET, 1 / TARGET_DAYS) - 1; // ~3.7% daily
+const POSITION_SIZE_PERCENT = 0.5; // Use 50% of buying power per trade (aggressive)
+const MIN_POSITION_SIZE = 1; // Minimum 1 share
+
+/**
+ * Calculate position size based on account value and growth goals
+ * Goal: Triple account in 30 days requires aggressive position sizing
+ */
+async function calculatePositionSize(symbol: string, accountValue: number, buyingPower: number): Promise<number> {
+  try {
+    // Get current price
+    const currentPrice = await fetchCurrentPrice(symbol);
+    
+    if (!currentPrice || currentPrice <= 0) {
+      // Fallback: use a reasonable default price estimate (SPY is typically $400-600)
+      return Math.max(MIN_POSITION_SIZE, Math.floor((buyingPower * POSITION_SIZE_PERCENT) / 500));
+    }
+
+    // Calculate position size: use percentage of buying power
+    // For aggressive growth, we use a larger portion of buying power
+    const positionValue = buyingPower * POSITION_SIZE_PERCENT;
+    const shares = Math.floor(positionValue / currentPrice);
+
+    return Math.max(MIN_POSITION_SIZE, shares);
+  } catch (error) {
+    console.error('Error calculating position size:', error);
+    // Fallback to conservative estimate
+    return Math.max(MIN_POSITION_SIZE, Math.floor((buyingPower * POSITION_SIZE_PERCENT) / 500));
+  }
+}
+
+/**
+ * Get initial account value (first snapshot) or current value
+ */
+async function getInitialAccountValue(): Promise<number | null> {
+  try {
+    const firstSnapshot = await AccountSnapshot.findOne().sort({ timestamp: 1 });
+    return firstSnapshot ? firstSnapshot.portfolioValue : null;
+  } catch (error) {
+    console.error('Error getting initial account value:', error);
+    return null;
+  }
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -23,10 +70,29 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Get account info for position sizing
+    const account = await alpaca.getAccount();
+    const accountValue = parseFloat(account.portfolio_value);
+    const buyingPower = parseFloat(account.buying_power);
+    const initialValue = await getInitialAccountValue();
+    
+    // Calculate growth metrics
+    const currentGrowth = initialValue ? (accountValue / initialValue) : 1.0;
+    const daysElapsed = initialValue ? Math.max(1, Math.floor((Date.now() - (await AccountSnapshot.findOne().sort({ timestamp: 1 }))!.timestamp.getTime()) / (1000 * 60 * 60 * 24))) : 1;
+    const requiredGrowth = Math.pow(GROWTH_TARGET, daysElapsed / TARGET_DAYS);
+    const progressToGoal = initialValue ? (currentGrowth / requiredGrowth) * 100 : 0;
+
+    console.log(`📊 Growth Tracking: Current: ${(currentGrowth * 100).toFixed(2)}% | Target: ${(requiredGrowth * 100).toFixed(2)}% | Progress: ${progressToGoal.toFixed(2)}%`);
+
     if (signal === 'HOLD') {
       return NextResponse.json({
         success: true,
         message: 'HOLD signal - No action taken',
+        growth: {
+          current: currentGrowth,
+          target: requiredGrowth,
+          progress: progressToGoal,
+        },
       });
     }
 
@@ -40,6 +106,9 @@ export async function POST(request: NextRequest) {
 
     const currentQty = currentPosition ? parseInt(currentPosition.qty) : 0;
 
+    // Calculate dynamic position size
+    const positionSize = await calculatePositionSize(symbol, accountValue, buyingPower);
+
     let order = null;
 
     if (signal === 'BUY') {
@@ -49,45 +118,72 @@ export async function POST(request: NextRequest) {
           await alpaca.closePosition(symbol);
         }
 
-        // Place buy order
+        // Place buy order with calculated position size
         order = await alpaca.createOrder({
           symbol,
-          qty: POSITION_SIZE,
+          qty: positionSize,
           side: 'buy',
           type: 'market',
           time_in_force: 'day',
         });
 
-        console.log(`✅ BUY order placed: ${POSITION_SIZE} shares of ${symbol}`);
+        const positionValue = positionSize * (await fetchCurrentPrice(symbol).catch(() => 500));
+        console.log(`✅ BUY order placed: ${positionSize} shares of ${symbol} (~$${positionValue.toFixed(2)}, ${(POSITION_SIZE_PERCENT * 100).toFixed(0)}% of buying power)`);
       } else {
-        return NextResponse.json({
-          success: true,
-          message: `Already holding ${currentQty} shares of ${symbol}`,
-          currentPosition: {
-            qty: currentQty,
-            symbol,
-          },
-        });
+        // Consider adding to position if we're behind on growth target
+        if (progressToGoal < 90 && buyingPower > accountValue * 0.1) {
+          const additionalSize = await calculatePositionSize(symbol, accountValue, buyingPower);
+          if (additionalSize > 0) {
+            order = await alpaca.createOrder({
+              symbol,
+              qty: additionalSize,
+              side: 'buy',
+              type: 'market',
+              time_in_force: 'day',
+            });
+            console.log(`📈 Adding to position: ${additionalSize} shares (behind growth target)`);
+          }
+        } else {
+          return NextResponse.json({
+            success: true,
+            message: `Already holding ${currentQty} shares of ${symbol}`,
+            currentPosition: {
+              qty: currentQty,
+              symbol,
+            },
+            growth: {
+              current: currentGrowth,
+              target: requiredGrowth,
+              progress: progressToGoal,
+            },
+          });
+        }
       }
     } else if (signal === 'SELL') {
       if (currentQty > 0) {
         // Close long position
         await alpaca.closePosition(symbol);
 
-        // Place sell (short) order
+        // Place sell (short) order with calculated position size
         order = await alpaca.createOrder({
           symbol,
-          qty: POSITION_SIZE,
+          qty: positionSize,
           side: 'sell',
           type: 'market',
           time_in_force: 'day',
         });
 
-        console.log(`✅ SELL order placed: ${POSITION_SIZE} shares of ${symbol}`);
+        const positionValue = positionSize * (await fetchCurrentPrice(symbol).catch(() => 500));
+        console.log(`✅ SELL order placed: ${positionSize} shares of ${symbol} (~$${positionValue.toFixed(2)}, ${(POSITION_SIZE_PERCENT * 100).toFixed(0)}% of buying power)`);
       } else {
         return NextResponse.json({
           success: true,
           message: 'No position to sell or already short',
+          growth: {
+            current: currentGrowth,
+            target: requiredGrowth,
+            progress: progressToGoal,
+          },
         });
       }
     }
@@ -99,7 +195,7 @@ export async function POST(request: NextRequest) {
         symbol,
         orderId: order.id,
         side: signal.toLowerCase(),
-        quantity: POSITION_SIZE,
+        quantity: positionSize,
         price: parseFloat(order.filled_avg_price || '0'),
         status: order.status,
       });
@@ -115,7 +211,9 @@ export async function POST(request: NextRequest) {
       }
 
       // Get updated account info
-      const account = await alpaca.getAccount();
+      const updatedAccount = await alpaca.getAccount();
+      const updatedValue = parseFloat(updatedAccount.portfolio_value);
+      const updatedGrowth = initialValue ? (updatedValue / initialValue) : 1.0;
 
       return NextResponse.json({
         success: true,
@@ -128,8 +226,15 @@ export async function POST(request: NextRequest) {
           status: order.status,
         },
         account: {
-          portfolioValue: parseFloat(account.portfolio_value),
-          cash: parseFloat(account.cash),
+          portfolioValue: updatedValue,
+          cash: parseFloat(updatedAccount.cash),
+          buyingPower: parseFloat(updatedAccount.buying_power),
+        },
+        growth: {
+          current: updatedGrowth,
+          target: requiredGrowth,
+          progress: initialValue ? ((updatedGrowth / requiredGrowth) * 100) : 0,
+          goal: `${(GROWTH_TARGET * 100).toFixed(0)}x in ${TARGET_DAYS} days`,
         },
       });
     }
