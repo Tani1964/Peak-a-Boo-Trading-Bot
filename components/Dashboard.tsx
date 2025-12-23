@@ -11,7 +11,11 @@ import StrategyControl from './StrategyControl';
 import TradeHistory from './TradeHistory';
 import DataStatistics from './DataStatistics';
 import YouTubeStrategyExtractor from './YouTubeStrategyExtractor';
-import PerformanceGraph from './PerformanceGraph';
+import dynamic from 'next/dynamic';
+
+const PerformanceGraph = dynamic(() => import('./PerformanceGraph'), {
+  ssr: false,
+});
 
 interface DashboardProps {
   symbol: string;

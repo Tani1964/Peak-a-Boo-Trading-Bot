@@ -21,19 +21,22 @@ import 'chartjs-adapter-date-fns';
 import { useTimezone } from '@/lib/timezone';
 import { formatDateInTimezone } from '@/lib/date-utils';
 
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend,
-  Filler,
-  TimeScale,
-  zoomPlugin
-);
+// Only register Chart.js on the client side
+if (typeof window !== 'undefined') {
+  ChartJS.register(
+    CategoryScale,
+    LinearScale,
+    PointElement,
+    LineElement,
+    BarElement,
+    Title,
+    Tooltip,
+    Legend,
+    Filler,
+    TimeScale,
+    zoomPlugin
+  );
+}
 
 interface PerformanceGraphProps {
   symbol: string;
