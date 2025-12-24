@@ -242,14 +242,14 @@ export async function POST(request: NextRequest) {
         console.log(`📊 ${normalizedSymbol}: Current position = ${currentQty} shares`);
         let order = null;
 
-        if (signal === 'BUY' && currentQty <= 0) {
-          // Close any short position first
+        if (signal === 'BUY') {
+          // Close any short position first if we're short
           if (currentQty < 0) {
             console.log(`🔄 ${normalizedSymbol}: Closing short position before buying...`);
             await alpaca.closePosition(normalizedSymbol);
           }
 
-          // Place buy order
+          // Place buy order (allows accumulating more shares if already long)
           order = await alpaca.createOrder({
             symbol: normalizedSymbol,
             qty: POSITION_SIZE,
@@ -259,12 +259,14 @@ export async function POST(request: NextRequest) {
           });
 
           console.log(`✅ BUY order placed: ${POSITION_SIZE} shares of ${normalizedSymbol}`);
-        } else if (signal === 'SELL' && currentQty > 0) {
-          // Close long position
-          console.log(`🔄 ${normalizedSymbol}: Closing long position before selling...`);
-          await alpaca.closePosition(normalizedSymbol);
+        } else if (signal === 'SELL') {
+          // Close long position if we're long
+          if (currentQty > 0) {
+            console.log(`🔄 ${normalizedSymbol}: Closing long position before selling...`);
+            await alpaca.closePosition(normalizedSymbol);
+          }
 
-          // Place sell (short) order
+          // Place sell (short) order (allows accumulating more short shares if already short)
           order = await alpaca.createOrder({
             symbol: normalizedSymbol,
             qty: POSITION_SIZE,
@@ -342,9 +344,8 @@ export async function POST(request: NextRequest) {
             status: orderData.status,
           };
         } else {
-          result.message = signal === 'BUY' 
-            ? `Already holding ${currentQty} shares, no action taken`
-            : 'No position to sell, no action taken';
+          // This should not happen with BUY/SELL signals, but kept as fallback
+          result.message = `Unexpected state: signal=${signal}, currentQty=${currentQty}, no order created`;
         }
       } catch (executeError: unknown) {
         result.executeError = executeError instanceof Error ? executeError.message : 'Unknown error executing order';

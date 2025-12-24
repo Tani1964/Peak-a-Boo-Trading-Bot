@@ -1,0 +1,115 @@
+name: Scheduled Trading
+
+on:
+  # Schedule: Every 30 minutes during market hours (9:30 AM - 4:00 PM ET, Mon-Fri)
+  # UTC times: 13:30-20:00 (9:30 AM ET = 13:30 UTC, 4:00 PM ET = 20:00 UTC)
+  schedule:
+    - cron: '0,30 13-20 * * 1-5'  # Every 30 minutes from 13:00 to 20:59 UTC, Mon-Fri
+  # Allow manual triggering from GitHub Actions UI
+  workflow_dispatch:
+    inputs:
+      symbol:
+        description: 'Trading symbol (e.g., SPY)'
+        required: false
+        default: 'SPY'
+      auto_execute:
+        description: 'Auto execute trades'
+        required: false
+        default: 'true'
+        type: choice
+        options:
+          - 'true'
+          - 'false'
+
+jobs:
+  scheduled-trade:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60  # Increased timeout for processing many symbols
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+      
+      - name: Read symbols and execute trades
+        env:
+          APP_URL: ${{ secrets.APP_URL || 'https://your-app.vercel.app' }}
+          AUTO_TRADE_SECRET: ${{ secrets.AUTO_TRADE_SECRET }}
+          MANUAL_SYMBOL: ${{ github.event.inputs.symbol || '' }}
+          MANUAL_AUTO_EXECUTE: ${{ github.event.inputs.auto_execute || 'true' }}
+        run: |
+          # Determine if this is a manual run or scheduled run
+          if [ -n "$MANUAL_SYMBOL" ]; then
+            # Manual run - use provided symbol
+            SYMBOL="$MANUAL_SYMBOL"
+            AUTO_EXECUTE="$MANUAL_AUTO_EXECUTE"
+            echo "🔧 Manual run: Processing symbol $SYMBOL"
+          else
+            # Scheduled run - read from ALL_SYMBOLS_LIST.txt
+            if [ ! -f "ALL_SYMBOLS_LIST.txt" ]; then
+              echo "❌ Error: ALL_SYMBOLS_LIST.txt not found"
+              exit 1
+            fi
+            
+            # Read first line and trim whitespace
+            SYMBOL=$(head -n 1 ALL_SYMBOLS_LIST.txt | xargs)
+            AUTO_EXECUTE="true"
+            echo "📋 Scheduled run: Reading symbols from ALL_SYMBOLS_LIST.txt"
+            echo "📊 Found symbols: ${SYMBOL:0:100}..." # Show first 100 chars
+          fi
+          
+          # Split symbols if comma-separated and process each
+          IFS=',' read -ra SYMBOL_ARRAY <<< "$SYMBOL"
+          TOTAL_SYMBOLS=${#SYMBOL_ARRAY[@]}
+          
+          echo "🚀 Starting to process $TOTAL_SYMBOLS symbols..."
+          echo "---"
+          
+          SUCCESS_COUNT=0
+          FAIL_COUNT=0
+          
+          for i in "${!SYMBOL_ARRAY[@]}"; do
+            symbol=$(echo "${SYMBOL_ARRAY[$i]}" | xargs)  # Trim whitespace
+            
+            # Skip empty symbols
+            if [ -z "$symbol" ]; then
+              continue
+            fi
+            
+            SYMBOL_NUM=$((i + 1))
+            echo ""
+            echo "🔄 [$SYMBOL_NUM/$TOTAL_SYMBOLS] Processing symbol: $symbol"
+            
+            # Build curl command
+            response=$(curl -s -w "\n%{http_code}" -X POST "${APP_URL}/api/strategy/auto" \
+              -H "Content-Type: application/json" \
+              -H "x-api-secret: ${AUTO_TRADE_SECRET}" \
+              -d "{\"symbol\": \"${symbol}\", \"autoExecute\": ${AUTO_EXECUTE}}")
+            
+            http_code=$(echo "$response" | tail -n1)
+            body=$(echo "$response" | sed '$d')
+            
+            if [ "$http_code" -eq 200 ] || [ "$http_code" -eq 201 ]; then
+              echo "✅ Success: $symbol (HTTP $http_code)"
+              SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+              # Show a brief summary if available
+              if command -v jq &> /dev/null; then
+                echo "$body" | jq -r '.signal.signal // .message // "Processed"' 2>/dev/null || echo "Processed"
+              fi
+            else
+              echo "❌ Failed: $symbol (HTTP $http_code)"
+              FAIL_COUNT=$((FAIL_COUNT + 1))
+              echo "$body" | head -n 5  # Show first 5 lines of error
+            fi
+            
+            # Add a small delay between symbols to avoid rate limiting
+            if [ $SYMBOL_NUM -lt $TOTAL_SYMBOLS ]; then
+              echo "⏳ Waiting 1 second before next symbol..."
+              sleep 1
+            fi
+          done
+          
+          echo ""
+          echo "---"
+          echo "✅ Workflow completed!"
+          echo "📊 Summary: $SUCCESS_COUNT successful, $FAIL_COUNT failed out of $TOTAL_SYMBOLS total symbols"
+
