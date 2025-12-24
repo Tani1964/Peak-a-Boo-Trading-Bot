@@ -79,8 +79,10 @@ jobs:
             echo ""
             echo "🔄 [$SYMBOL_NUM/$TOTAL_SYMBOLS] Processing symbol: $symbol"
             
-            # Build curl command
-            response=$(curl -s -w "\n%{http_code}" -X POST "${APP_URL}/api/strategy/auto" \
+            # Build curl command with redirect following
+            # Remove trailing slash from APP_URL if present
+            CLEAN_URL="${APP_URL%/}"
+            response=$(curl -L -s -w "\n%{http_code}" -X POST "${CLEAN_URL}/api/strategy/auto" \
               -H "Content-Type: application/json" \
               -H "x-api-secret: ${AUTO_TRADE_SECRET}" \
               -d "{\"symbol\": \"${symbol}\", \"autoExecute\": ${AUTO_EXECUTE}}")
