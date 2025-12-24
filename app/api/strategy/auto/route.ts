@@ -74,17 +74,12 @@ export async function POST(request: NextRequest) {
 
     console.log(`🔄 Auto-trading: Processing symbol ${normalizedSymbol} (original: ${symbol})`);
 
-    // Check if market is open
+    // Check if market is open (we'll still analyze even if closed, but only execute when open)
     const clock = await alpaca.getClock();
-    if (!clock.is_open) {
-      console.log(`⏸️  Market closed for ${normalizedSymbol}, skipping`);
-      return NextResponse.json({
-        success: false,
-        error: 'Market is currently closed',
-        nextOpen: clock.next_open,
-        skipped: true,
-        symbol: normalizedSymbol,
-      });
+    const isMarketOpen = clock.is_open;
+    
+    if (!isMarketOpen) {
+      console.log(`⏸️  Market closed for ${normalizedSymbol} - will analyze but skip execution`);
     }
 
     // Fetch historical data (last 6 months for sufficient indicator calculation)
@@ -197,6 +192,7 @@ export async function POST(request: NextRequest) {
       };
       message?: string;
       executeError?: string;
+      nextOpen?: string;
     }
 
     const result: AutoTradeResult = {
@@ -227,7 +223,7 @@ export async function POST(request: NextRequest) {
     if (signal === 'HOLD') {
       console.log(`⏸️  ${normalizedSymbol}: HOLD signal - no trade executed`);
       result.message = 'HOLD signal - no action taken';
-    } else if (autoExecute) {
+    } else if (autoExecute && isMarketOpen) {
       console.log(`🚀 ${normalizedSymbol}: ${signal} signal - attempting to execute trade...`);
       try {
         // Check current position
@@ -351,6 +347,10 @@ export async function POST(request: NextRequest) {
         result.executeError = executeError instanceof Error ? executeError.message : 'Unknown error executing order';
         console.error(`❌ Error executing order for ${normalizedSymbol}:`, executeError);
       }
+    } else if (autoExecute && !isMarketOpen) {
+      console.log(`⏸️  ${normalizedSymbol}: Market is closed - signal generated but trade not executed`);
+      result.message = `Market is currently closed - ${signal} signal generated but trade not executed. Next open: ${clock.next_open}`;
+      result.nextOpen = clock.next_open;
     }
 
     console.log(`✅ Completed processing ${normalizedSymbol}: signal=${signal}, executed=${result.executed}`);
