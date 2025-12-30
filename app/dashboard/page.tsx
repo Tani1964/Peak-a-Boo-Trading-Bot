@@ -1,25 +1,34 @@
+
+
 "use client";
-
-
 import AccountInfo from '@/components/AccountInfo';
 import DataStatistics from '@/components/DataStatistics';
 import MarketStatus from '@/components/MarketStatus';
 import PerformanceGraph from '@/components/PerformanceGraph';
 import SymbolSelector from '@/components/SymbolSelector';
 import TradeSummaryCard from '@/components/TradeSummaryCard';
-import { useState } from 'react';
-import useSWR from 'swr';
-
-
+import { useEffect, useState } from 'react';
 
 export default function DashboardPage() {
   const [symbol, setSymbol] = useState('AAPL');
   const [refreshKey, setRefreshKey] = useState(0);
-  const { data: accountData, error: _accountError } = useSWR('/api/account', url => fetch(url).then(res => res.json()));
-  const { data: marketData, error: _marketError } = useSWR('/api/market/status', url => fetch(url).then(res => res.json()));
+  const [accountData, setAccountData] = useState<any>({ success: false });
+  const [marketData, setMarketData] = useState<any>({ success: false });
 
-  // Update refreshKey when symbol changes
-  const handleSymbolChange = (newSymbol: string) => {
+  useEffect(() => {
+    async function fetchAccountData() {
+      const res = await fetch('/api/account');
+      setAccountData(await res.json());
+    }
+    async function fetchMarketData() {
+      const res = await fetch('/api/market/status');
+      setMarketData(await res.json());
+    }
+    fetchAccountData();
+    fetchMarketData();
+  }, []);
+
+  const handleSymbolChange = (newSymbol:any) => {
     setSymbol(newSymbol);
     setRefreshKey(prev => prev + 1);
   };
@@ -39,3 +48,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+export const dynamic = 'force-dynamic';

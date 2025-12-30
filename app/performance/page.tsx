@@ -24,3 +24,6 @@ export default function PerformancePage() {
     </div>
   );
 }
+
+export const dynamic = 'force-dynamic';
+

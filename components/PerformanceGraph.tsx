@@ -1,42 +1,26 @@
 'use client';
 
-import { useRef } from 'react';
-import useSWR from 'swr';
+import { formatDateInTimezone } from '@/lib/date-utils';
+import { useTimezone } from '@/lib/timezone';
 import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  PointElement,
-  LineElement,
   BarElement,
+  CategoryScale,
+  Chart as ChartJS,
+  Filler,
+  Legend,
+  LinearScale,
+  LineElement,
+  PointElement,
+  TimeScale,
   Title,
   Tooltip,
-  Legend,
-  Filler,
-  TimeScale,
 } from 'chart.js';
-import { Line, Bar } from 'react-chartjs-2';
-import zoomPlugin from 'chartjs-plugin-zoom';
 import 'chartjs-adapter-date-fns';
-import { useTimezone } from '@/lib/timezone';
-import { formatDateInTimezone } from '@/lib/date-utils';
+import zoomPlugin from 'chartjs-plugin-zoom';
+import { useEffect, useRef } from 'react';
+import { Bar, Line } from 'react-chartjs-2';
+import useSWR from 'swr';
 
-// Only register Chart.js on the client side
-if (typeof window !== 'undefined') {
-  ChartJS.register(
-    CategoryScale,
-    LinearScale,
-    PointElement,
-    LineElement,
-    BarElement,
-    Title,
-    Tooltip,
-    Legend,
-    Filler,
-    TimeScale,
-    zoomPlugin
-  );
-}
 
 interface PerformanceGraphProps {
   symbol: string;
@@ -53,6 +37,23 @@ export default function PerformanceGraph({
   refreshInterval = 0,
   days = 3650 // Default to 10 years to fetch all available data
 }: PerformanceGraphProps) {
+    useEffect(() => {
+      if (typeof window !== 'undefined') {
+        ChartJS.register(
+          CategoryScale,
+          LinearScale,
+          PointElement,
+          LineElement,
+          BarElement,
+          Title,
+          Tooltip,
+          Legend,
+          Filler,
+          TimeScale,
+          zoomPlugin
+        );
+      }
+    }, []);
   const { timezone } = useTimezone();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const portfolioChartRef = useRef<any>(null);
