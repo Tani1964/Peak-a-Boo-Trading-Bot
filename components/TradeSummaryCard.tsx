@@ -32,7 +32,17 @@ const TradeSummaryCard = () => {
             </tr>
           </thead>
           <tbody>
-            {data.trades.map((t, idx) => (
+            {data.trades.map((t: {
+              timestamp: string;
+              symbol: string;
+              side: string;
+              quantity: number;
+              price: number;
+              status: string;
+              profitLoss?: number;
+              profitLossPercent?: number;
+              orderId?: string;
+            }, idx: number) => (
               <tr key={idx} className="border-b">
                 <td className="px-2 py-1 whitespace-nowrap">{new Date(t.timestamp).toLocaleString()}</td>
                 <td className="px-2 py-1">{t.symbol}</td>
