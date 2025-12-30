@@ -1,5 +1,5 @@
 import alpaca, { AlpacaOrder, AlpacaPosition } from '@/lib/alpaca';
-import { calculateIndicators, DEFAULT_CONFIG, generateSignal } from '@/lib/indicators';
+import { calculateIndicators, DEFAULT_CONFIG } from '@/lib/indicators';
 import connectDB from '@/lib/mongodb';
 import { fetchHistoricalData } from '@/lib/yahoo-finance';
 import { Signal } from '@/models/Signal';
@@ -128,8 +128,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Generate trading signal
-    const signal = generateSignal(indicators) as 'BUY' | 'SELL' | 'HOLD';
+    // --- Conservative Strategy: Tighter Buy/Sell Rules ---
+    let signal: 'BUY' | 'SELL' | 'HOLD' = 'HOLD';
+    // Only buy if RSI < 35 and MACD > MACD Signal and MACD Histogram > 0
+    if (indicators.rsi < 35 && indicators.macd > indicators.macdSignal && indicators.macdHistogram > 0) {
+      signal = 'BUY';
+    }
+    // Only sell if RSI > 65 and MACD < MACD Signal and MACD Histogram < 0
+    else if (indicators.rsi > 65 && indicators.macd < indicators.macdSignal && indicators.macdHistogram < 0) {
+      signal = 'SELL';
+    }
+    // Otherwise, hold
     const latestPrice = closePrices[closePrices.length - 1];
     
     console.log(`📈 ${normalizedSymbol}: Signal=${signal}, RSI=${indicators.rsi.toFixed(2)}, MACD=${indicators.macd.toFixed(4)}, Price=$${latestPrice.toFixed(2)}`);
@@ -140,6 +149,23 @@ export async function POST(request: NextRequest) {
     const cash = parseFloat(account.cash || '0');
     const buyingPower = parseFloat(account.buying_power || '0');
     const equity = parseFloat(account.equity || '0');
+
+    // --- Risk Management ---
+    // Limit position size to 10% of portfolio value
+    const maxPositionValue = portfolioValue * 0.1;
+    const maxQty = Math.max(1, Math.floor(maxPositionValue / latestPrice));
+    // Prevent overtrading: do not enter a new trade if already in a position
+    let currentPosition: AlpacaPosition | null = null;
+    try {
+      currentPosition = await alpaca.getPosition(normalizedSymbol) as AlpacaPosition;
+    } catch {}
+    const currentQty = currentPosition ? parseInt(currentPosition.qty) : 0;
+    // Max daily loss limit: halt trading if loss exceeds 5% of portfolio
+    const dailyLossLimit = portfolioValue * 0.05;
+    if (portfolioValue < equity - dailyLossLimit) {
+      signal = 'HOLD';
+      console.log('Daily loss limit reached, halting trading for today.');
+    }
 
     // Save signal to database
     const signalDoc = new Signal({
@@ -247,70 +273,114 @@ export async function POST(request: NextRequest) {
         let order = null;
 
         if (signal === 'BUY') {
-          // Close any short position first if we're short
-          if (currentQty < 0) {
-            console.log(`🔄 ${normalizedSymbol}: Closing short position before buying...`);
-            await alpaca.closePosition(normalizedSymbol);
-          }
-
-          // Place buy order (allows accumulating more shares if already long)
-          order = await alpaca.createOrder({
-            symbol: normalizedSymbol,
-            qty: POSITION_SIZE,
-            side: 'buy',
-            type: 'market',
-            time_in_force: 'day',
-          });
-
-          console.log(`✅ BUY order placed: ${POSITION_SIZE} shares of ${normalizedSymbol}`);
-        } else if (signal === 'SELL') {
-          // Close long position if we're long
+          // --- Stop-Loss/Take-Profit Logic ---
+          // If already in a long position, do not buy more
           if (currentQty > 0) {
-            console.log(`🔄 ${normalizedSymbol}: Closing long position before selling...`);
-            await alpaca.closePosition(normalizedSymbol);
+            console.log('Already in a long position, skipping buy.');
+            order = null;
+          } else {
+            // Close any short position first if we're short
+            if (currentQty < 0) {
+              console.log(`🔄 ${normalizedSymbol}: Closing short position before buying...`);
+              await alpaca.closePosition(normalizedSymbol);
+            }
+            // Place buy order (limit position size)
+            order = await alpaca.createOrder({
+              symbol: normalizedSymbol,
+              qty: maxQty,
+              side: 'buy',
+              type: 'market',
+              time_in_force: 'day',
+            });
+            console.log(`✅ BUY order placed: ${maxQty} shares of ${normalizedSymbol}`);
           }
-
-          // Place sell (short) order (allows accumulating more short shares if already short)
-          order = await alpaca.createOrder({
-            symbol: normalizedSymbol,
-            qty: POSITION_SIZE,
-            side: 'sell',
-            type: 'market',
-            time_in_force: 'day',
-          });
-
-          console.log(`✅ SELL order placed: ${POSITION_SIZE} shares of ${normalizedSymbol}`);
+        } else if (signal === 'SELL') {
+          // If already in a short position, do not sell more
+          if (currentQty < 0) {
+            console.log('Already in a short position, skipping sell.');
+            order = null;
+          } else {
+            // Close long position if we're long
+            if (currentQty > 0) {
+              console.log(`🔄 ${normalizedSymbol}: Closing long position before selling...`);
+              await alpaca.closePosition(normalizedSymbol);
+            }
+            // Place sell (short) order (limit position size)
+            order = await alpaca.createOrder({
+              symbol: normalizedSymbol,
+              qty: maxQty,
+              side: 'sell',
+              type: 'market',
+              time_in_force: 'day',
+            });
+            console.log(`✅ SELL order placed: ${maxQty} shares of ${normalizedSymbol}`);
+          }
         } else {
           console.log(`⏸️  ${normalizedSymbol}: No action - signal=${signal}, currentQty=${currentQty}`);
         }
 
         if (order) {
+          // --- Stop-Loss/Take-Profit Orders ---
+          // After a buy, place a stop-loss and take-profit order (OCO logic)
+          // (This is a simplified version; for real OCO, use Alpaca bracket orders if available)
+          if (signal === 'BUY') {
+            const stopLossPrice = latestPrice * 0.97; // 3% stop loss
+            const takeProfitPrice = latestPrice * 1.05; // 5% take profit
+            try {
+              await alpaca.createOrder({
+                symbol: normalizedSymbol,
+                qty: maxQty,
+                side: 'sell',
+                type: 'stop',
+                stop_price: stopLossPrice,
+                time_in_force: 'gtc',
+              });
+              await alpaca.createOrder({
+                symbol: normalizedSymbol,
+                qty: maxQty,
+                side: 'sell',
+                type: 'limit',
+                limit_price: takeProfitPrice,
+                time_in_force: 'gtc',
+              });
+              console.log('Stop-loss and take-profit orders placed.');
+            } catch (e) {
+              console.error('Failed to place stop-loss/take-profit orders:', e);
+            }
+          }
+        // ...existing code...
           const orderData = order as AlpacaOrder;
-          
+          // Poll for order status to be 'filled'
+          let finalOrder = orderData;
+          let pollCount = 0;
+          const maxPolls = 10; // e.g. poll up to 10 times
+          const pollDelay = 2000; // 2 seconds between polls
+          while (finalOrder.status !== 'filled' && finalOrder.status !== 'canceled' && pollCount < maxPolls) {
+            await new Promise(res => setTimeout(res, pollDelay));
+            finalOrder = await alpaca.getOrder(orderData.id);
+            pollCount++;
+          }
           // Get updated account info after trade
           const updatedAccount = await alpaca.getAccount();
           const updatedPortfolioValue = parseFloat(updatedAccount.portfolio_value || '0');
           const updatedCash = parseFloat(updatedAccount.cash || '0');
           const updatedBuyingPower = parseFloat(updatedAccount.buying_power || '0');
           const updatedEquity = parseFloat(updatedAccount.equity || '0');
-          
           // Calculate trade value
-          const tradePrice = parseFloat(orderData.filled_avg_price || '0');
+          const tradePrice = parseFloat(finalOrder.filled_avg_price || '0');
           const tradeValue = POSITION_SIZE * tradePrice;
-          
           // Map Alpaca order status to Trade model status
-          const tradeStatus = mapAlpacaStatusToTradeStatus(orderData.status);
-          
+          const tradeStatus = mapAlpacaStatusToTradeStatus(finalOrder.status);
           // Save trade to database with enhanced data
           const trade = new Trade({
             timestamp: new Date(),
             symbol: normalizedSymbol,
-            orderId: orderData.id,
+            orderId: finalOrder.id,
             side: signal.toLowerCase() as 'buy' | 'sell',
             quantity: POSITION_SIZE,
             price: tradePrice,
             status: tradeStatus,
-            filledAt: orderData.filled_at ? new Date(orderData.filled_at) : new Date(),
+            filledAt: finalOrder.filled_at ? new Date(finalOrder.filled_at) : undefined,
             portfolioValue: updatedPortfolioValue,
             cash: updatedCash,
             buyingPower: updatedBuyingPower,
@@ -318,9 +388,7 @@ export async function POST(request: NextRequest) {
             totalValue: tradeValue,
             signalId: signalDoc._id.toString(),
           });
-
           await trade.save();
-          
           // Save account snapshot
           const { AccountSnapshot } = await import('@/models/AccountSnapshot');
           await new AccountSnapshot({
@@ -331,21 +399,21 @@ export async function POST(request: NextRequest) {
             equity: updatedEquity,
             accountStatus: updatedAccount.status || 'ACTIVE',
           }).save();
-
-          // Update signal as executed
-          await Signal.findByIdAndUpdate(signalDoc._id, {
-            executed: true,
-            orderId: orderData.id,
-          });
-
-          result.executed = true;
+          // Update signal as executed if filled
+          if (tradeStatus === 'filled') {
+            await Signal.findByIdAndUpdate(signalDoc._id, {
+              executed: true,
+              orderId: finalOrder.id,
+            });
+          }
+          result.executed = tradeStatus === 'filled';
           result.order = {
-            id: orderData.id,
-            symbol: orderData.symbol,
-            qty: orderData.qty,
-            side: orderData.side,
-            type: orderData.type,
-            status: orderData.status,
+            id: finalOrder.id,
+            symbol: finalOrder.symbol,
+            qty: finalOrder.qty,
+            side: finalOrder.side,
+            type: finalOrder.type,
+            status: finalOrder.status,
           };
         } else {
           // This should not happen with BUY/SELL signals, but kept as fallback

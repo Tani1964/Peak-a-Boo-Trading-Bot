@@ -1,17 +1,22 @@
 'use client';
 
+import { strategyApproach, strategyPlan, strategyReason } from '@/lib/strategy-text';
+import { TIMEZONES, useTimezone } from '@/lib/timezone';
+import dynamic from 'next/dynamic';
 import { useState } from 'react';
 import useSWR from 'swr';
-import { useTimezone, TIMEZONES } from '@/lib/timezone';
 import AccountInfo from './AccountInfo';
+import CurrentStrategyCard from './CurrentStrategyCard';
+import DataStatistics from './DataStatistics';
 import MarketStatus from './MarketStatus';
 import Positions from './Positions';
 import SignalHistory from './SignalHistory';
+import StrategyCard from './StrategyCard';
 import StrategyControl from './StrategyControl';
 import TradeHistory from './TradeHistory';
-import DataStatistics from './DataStatistics';
+import TradeSummaryCard from './TradeSummaryCard';
+import UpdatePendingTradesButton from './UpdatePendingTradesButton';
 import YouTubeStrategyExtractor from './YouTubeStrategyExtractor';
-import dynamic from 'next/dynamic';
 
 const PerformanceGraph = dynamic(() => import('./PerformanceGraph'), {
   ssr: false,
@@ -73,6 +78,14 @@ export default function Dashboard({ symbol }: DashboardProps) {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="space-y-6">
+        {/* Strategy Card */}
+        <StrategyCard plan={strategyPlan} approach={strategyApproach} reason={strategyReason} />
+        {/* Current Strategy Card */}
+        <CurrentStrategyCard />
+        {/* Update Pending Trades Button */}
+        <UpdatePendingTradesButton />
+        {/* Trade Summary Card */}
+        <TradeSummaryCard />
         {/* Trading Time Controls */}
         <div className="bg-white/80 backdrop-blur-sm rounded-2xl shadow-xl border border-gray-200/50 p-6">
           <div className="flex items-center justify-between flex-wrap gap-4">
