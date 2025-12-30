@@ -14,8 +14,8 @@ import { useState } from 'react';
 
 export default function DashboardPage() {
   const [symbol, setSymbol] = useState('AAPL');
-  const { data: accountData, error: accountError } = useSWR('/api/account', url => fetch(url).then(res => res.json()));
-  const { data: marketData, error: marketError } = useSWR('/api/market/status', url => fetch(url).then(res => res.json()));
+    const { data: accountData, error: _accountError } = useSWR('/api/account', url => fetch(url).then(res => res.json()));
+    const { data: marketData, error: _marketError } = useSWR('/api/market/status', url => fetch(url).then(res => res.json()));
 
   return (
     <div className="space-y-8">

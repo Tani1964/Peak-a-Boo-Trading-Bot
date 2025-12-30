@@ -49,8 +49,8 @@ const CurrentStrategyCard = () => {
       <div className="mb-2">
         <span className="font-semibold">Related News:</span>
         <ul className="ml-4 text-gray-700 list-disc">
-          {data.news?.map((item: any, idx: number) => (
-            <li key={idx}>
+          {data.news?.map((item: { url: string; headline: string; sentiment: string }, idx: number) => (
+              <li key={idx}>
               <a href={item.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">{item.headline}</a> <span className="italic text-xs">({item.sentiment})</span>
             </li>
           ))}

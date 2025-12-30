@@ -159,7 +159,7 @@ export async function POST(request: NextRequest) {
     try {
       currentPosition = await alpaca.getPosition(normalizedSymbol) as AlpacaPosition;
     } catch {}
-    const currentQty = currentPosition ? parseInt(currentPosition.qty) : 0;
+      const _currentQty = currentPosition ? parseInt(currentPosition.qty) : 0;
     // Max daily loss limit: halt trading if loss exceeds 5% of portfolio
     const dailyLossLimit = portfolioValue * 0.05;
     if (portfolioValue < equity - dailyLossLimit) {

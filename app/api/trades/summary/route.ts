@@ -5,7 +5,8 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function GET(request: NextRequest) {
   await connectDB();
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const trades = await Trade.find({ timestamp: { $gte: since } }).sort({ timestamp: -1 }).lean();
+    const trades = await Trade.find({ timestamp: { $gte: since } }).sort({ timestamp: -1 }).lean();
+    const _request = request; // Prefixing unused argument with '_'
 
   return NextResponse.json({
     count: trades.length,

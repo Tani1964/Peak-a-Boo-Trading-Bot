@@ -4,7 +4,7 @@ import { Trade } from '@/models/Trade';
 import { NextRequest, NextResponse } from 'next/server';
 
 // This endpoint updates all trades with status 'pending' by checking Alpaca for their latest status
-export async function POST(request: NextRequest) {
+export async function POST(_request: NextRequest) {
   await connectDB();
   const pendingTrades = await Trade.find({ status: 'pending', orderId: { $exists: true, $ne: null } });
   let updated = 0;

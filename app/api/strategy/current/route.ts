@@ -1,11 +1,11 @@
 import { calculateIndicators, DEFAULT_CONFIG } from '@/lib/indicators';
 import connectDB from '@/lib/mongodb';
-import { fetchCurrentPrice, fetchHistoricalData } from '@/lib/yahoo-finance';
+import { fetchHistoricalData } from '@/lib/yahoo-finance';
 import { Signal } from '@/models/Signal';
 import { Trade } from '@/models/Trade';
 import { NextRequest, NextResponse } from 'next/server';
 
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   await connectDB();
 
   // Get the most recent filled trade
@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
     const closePrices = historicalData.map((d) => d.close);
     indicators = calculateIndicators(closePrices, DEFAULT_CONFIG);
     price = closePrices[closePrices.length - 1];
-  } catch (e) {
+  } catch {
     // fallback to trade price
   }
 
@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
     : 'No signal data available.';
 
   // Optionally, you could fetch news here if you have a news API
-  const news = [];
+  const news: unknown[] = [];
 
   return NextResponse.json({
     symbol: latestTrade.symbol,

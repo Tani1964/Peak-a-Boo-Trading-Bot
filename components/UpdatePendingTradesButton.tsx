@@ -6,7 +6,7 @@ const UpdatePendingTradesButton = () => {
       const res = await fetch('/api/trades/update-pending', { method: 'POST' });
       const data = await res.json();
       alert(`Updated ${data.updated} pending trades.`);
-    } catch (e) {
+    } catch {
       alert('Failed to update pending trades.');
     }
   }, []);
