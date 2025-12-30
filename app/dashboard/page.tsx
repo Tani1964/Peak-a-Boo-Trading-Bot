@@ -2,9 +2,19 @@
 
 "use client";
 import AccountInfo from '@/components/AccountInfo';
-import DataStatistics from '@/components/DataStatistics';
+import dynamic from 'next/dynamic';
+
+const PerformanceGraph = dynamic(
+  () => import('@/components/PerformanceGraph'),
+  { ssr: false }
+);
+
+const DataStatistics = dynamic(
+  () => import('@/components/DataStatistics'),
+  { ssr: false }
+);
+
 import MarketStatus from '@/components/MarketStatus';
-import PerformanceGraph from '@/components/PerformanceGraph';
 import SymbolSelector from '@/components/SymbolSelector';
 import TradeSummaryCard from '@/components/TradeSummaryCard';
 import { useEffect, useState } from 'react';
@@ -48,4 +58,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-export const dynamic = 'force-dynamic';

@@ -1,6 +1,16 @@
 "use client";
-import DataStatistics from '@/components/DataStatistics';
-import PerformanceGraph from '@/components/PerformanceGraph';
+import dynamic from 'next/dynamic';
+
+const PerformanceGraph = dynamic(
+  () => import('@/components/PerformanceGraph'),
+  { ssr: false }
+);
+
+const DataStatistics = dynamic(
+  () => import('@/components/DataStatistics'),
+  { ssr: false }
+);
+
 import SymbolSelector from '@/components/SymbolSelector';
 import { useState } from 'react';
 
@@ -25,5 +35,4 @@ export default function PerformancePage() {
   );
 }
 
-export const dynamic = 'force-dynamic';
 
