@@ -75,11 +75,19 @@ export async function POST(request: NextRequest) {
     console.log(`🔄 Auto-trading: Processing symbol ${normalizedSymbol} (original: ${symbol})`);
 
     // Check if market is open (we'll still analyze even if closed, but only execute when open)
+    // Alpaca API uses US Eastern Time (ET) for market hours
     const clock = await alpaca.getClock();
     const isMarketOpen = clock.is_open;
     
+    // Log market status with times in ET
+    const currentTimeET = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
+    console.log(`📅 Market Status Check (ET): Current time: ${currentTimeET}, Market open: ${isMarketOpen}`);
+    console.log(`📅 Market Times (from Alpaca API): Next open: ${clock.next_open}, Next close: ${clock.next_close}`);
+    
     if (!isMarketOpen) {
       console.log(`⏸️  Market closed for ${normalizedSymbol} - will analyze but skip execution`);
+    } else {
+      console.log(`✅ Market is open - will analyze and execute trades if signal is not HOLD`);
     }
 
     // Fetch historical data (last 6 months for sufficient indicator calculation)
