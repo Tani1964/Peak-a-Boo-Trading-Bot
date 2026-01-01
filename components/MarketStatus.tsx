@@ -1,6 +1,6 @@
 'use client';
 
-import { createTimeInTimezone, formatDateInTimezone } from '@/lib/date-utils';
+import { formatDateInTimezone } from '@/lib/date-utils';
 import { useTimezone } from '@/lib/timezone';
 import { formatInTimeZone } from 'date-fns-tz';
 import { useEffect, useState } from 'react';
@@ -42,34 +42,12 @@ export default function MarketStatus({ data }: MarketStatusProps) {
 
   const { clock } = data;
   const isOpen = clock?.isOpen ?? false;
+  const nextOpen = clock?.nextOpen ? new Date(clock.nextOpen) : null;
+  const nextClose = clock?.nextClose ? new Date(clock.nextClose) : null;
 
-  // Get today's date components in ET timezone
-  const nowETString = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
-  const nowET = new Date(nowETString);
-  const year = nowET.getFullYear();
-  const month = nowET.getMonth() + 1; // getMonth() returns 0-11
-  const day = nowET.getDate();
-  
-  // Create market open (9:30 AM ET) and close (4:00 PM ET) times for today
-  // We create these as Date objects representing those times in ET
-  let marketOpenET: Date;
-  let marketCloseET: Date;
-  
-  try {
-    marketOpenET = createTimeInTimezone(year, month, day, 9, 30, 'America/New_York');
-    marketCloseET = createTimeInTimezone(year, month, day, 16, 0, 'America/New_York');
-  } catch {
-    // Fallback: use a simpler approach if the function fails
-    const todayStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-    marketOpenET = new Date(`${todayStr}T09:30:00-05:00`); // ET is UTC-5
-    marketCloseET = new Date(`${todayStr}T16:00:00-05:00`);
-  }
-
-  // Format these times in the selected timezone
-  const marketOpenInTZ = formatDateInTimezone(marketOpenET, timezone, 'HH:mm');
-  const marketCloseInTZ = formatDateInTimezone(marketCloseET, timezone, 'HH:mm');
-
-  // Get timezone abbreviation
+  // Format next open/close in user's timezone
+  const nextOpenStr = nextOpen ? formatDateInTimezone(nextOpen, timezone, "MMM dd, HH:mm zzz") : null;
+  const nextCloseStr = nextClose ? formatDateInTimezone(nextClose, timezone, "MMM dd, HH:mm zzz") : null;
   const tzAbbr = timezone === 'America/New_York' ? 'ET' : formatInTimeZone(currentTime, timezone, 'zzz');
 
   return (
@@ -90,41 +68,43 @@ export default function MarketStatus({ data }: MarketStatusProps) {
             {isOpen ? '● OPEN' : '● CLOSED'}
           </span>
         </div>
-        
+        <div className="flex justify-between items-center py-3">
+          <span className="text-gray-600 font-medium text-base">Timezone</span>
+          <span className="font-mono text-base">{tzAbbr}</span>
+        </div>
+        {!isOpen && nextOpenStr && (
+          <div className="flex justify-between items-center py-3">
+            <span className="text-gray-600 font-medium text-base">Next Market Open</span>
+            <span className="font-mono text-base">{nextOpenStr}</span>
+          </div>
+        )}
+        {isOpen && nextCloseStr && (
+          <div className="flex justify-between items-center py-3">
+            <span className="text-gray-600 font-medium text-base">Next Market Close</span>
+            <span className="font-mono text-base">{nextCloseStr}</span>
+          </div>
+        )}
+        {!isOpen && (
+          <div className="text-yellow-700 bg-yellow-100 rounded p-3 text-sm mt-2">
+            The market is currently closed. This may be due to a holiday or outside regular hours. Please check the next open time above.
+          </div>
+        )}
         <div className="bg-gray-50 -mx-4 px-4 py-3 rounded-lg border border-gray-200">
           <div className="text-xs text-gray-500 mb-1">Current Time ({tzAbbr})</div>
           <div className="text-sm font-semibold text-gray-700">
             {formatDateInTimezone(currentTime, timezone, 'MMM dd, yyyy HH:mm:ss')}
           </div>
         </div>
-
         <div className="bg-blue-50 -mx-4 px-4 py-3 rounded-lg border border-blue-200">
           <div className="text-xs text-gray-600 font-medium mb-2">Regular Market Hours (ET)</div>
           <div className="text-xs text-gray-700 space-y-1">
-            <div><span className="font-semibold">Open:</span> {marketOpenInTZ} ({tzAbbr}) = 9:30 AM (ET)</div>
-            <div><span className="font-semibold">Close:</span> {marketCloseInTZ} ({tzAbbr}) = 4:00 PM (ET)</div>
+            <div><span className="font-semibold">Open:</span> 9:30 AM (ET)</div>
+            <div><span className="font-semibold">Close:</span> 4:00 PM (ET)</div>
           </div>
           <div className="text-xs text-gray-500 mt-2 pt-2 border-t border-blue-200">
             Market status is based on US Eastern Time, regardless of selected timezone
           </div>
         </div>
-
-        {!isOpen && clock?.nextOpen && (
-          <div className="flex justify-between items-center py-3 bg-blue-50 -mx-4 px-4 rounded-lg">
-            <span className="text-gray-700 font-medium text-base">Next Open</span>
-            <span className="font-bold text-blue-700 text-base">
-              {formatDateInTimezone(clock.nextOpen, timezone, 'MMM dd, yyyy HH:mm')}
-            </span>
-          </div>
-        )}
-        {isOpen && clock?.nextClose && (
-          <div className="flex justify-between items-center py-3 bg-orange-50 -mx-4 px-4 rounded-lg">
-            <span className="text-gray-700 font-medium text-base">Closes At</span>
-            <span className="font-bold text-orange-700 text-base">
-              {formatDateInTimezone(clock.nextClose, timezone, 'HH:mm')}
-            </span>
-          </div>
-        )}
       </div>
     </div>
   );
