@@ -2,13 +2,21 @@ import Alpaca from '@alpacahq/alpaca-trade-api';
 
 let alpacaInstance: Alpaca | null = null;
 
+function normalizeAlpacaBaseUrl(baseUrl: string): string {
+  return baseUrl.replace(/\/+$/, '').replace(/\/v2$/, '');
+}
+
 function getAlpaca(): Alpaca {
   if (!alpacaInstance) {
+    const configuredBaseUrl = normalizeAlpacaBaseUrl(
+      process.env.ALPACA_BASE_URL || 'https://paper-api.alpaca.markets'
+    );
+
     const alpacaConfig = {
       keyId: process.env.ALPACA_API_KEY || '',
       secretKey: process.env.ALPACA_SECRET_KEY || '',
-      paper: process.env.ALPACA_BASE_URL?.includes('paper') ?? true,
-      baseUrl: process.env.ALPACA_BASE_URL || 'https://paper-api.alpaca.markets',
+      paper: configuredBaseUrl.includes('paper'),
+      baseUrl: configuredBaseUrl,
     };
 
     if (!alpacaConfig.keyId || !alpacaConfig.secretKey) {

@@ -9,8 +9,8 @@ import pandas as pd
 
 # Alpaca Configuration
 # Get these from: https://app.alpaca.markets/paper/dashboard/overview
-ALPACA_API_KEY = "PKUSUUF7FCJ5XJFSDU3S3BCVTV"
-ALPACA_SECRET_KEY = "DNuPqXSm9KEgtC9YY68via9HffeAycYim6gDVm6cojBM"
+ALPACA_API_KEY = "PKTBYBBYMC2U4YZO2OGDSVZDFI"
+ALPACA_SECRET_KEY = "C3HkLqerga6LFEZyCgvAzrXBfxhjyWh7xLQxtoJSuHDU"
 ALPACA_BASE_URL = "https://paper-api.alpaca.markets"  # Paper trading (demo)
 # For live trading use: "https://api.alpaca.markets"
 
@@ -85,16 +85,18 @@ def calculate_position_size(symbol, buying_power):
         bars = api.get_bars(symbol, "1Day", limit=1)
         if not bars or len(bars) == 0:
             # Fallback: use a reasonable default price estimate (SPY is typically $400-600)
-            return max(MIN_POSITION_SIZE, int((buying_power * POSITION_SIZE_PERCENT) / 500))
-        
+            return max(
+                MIN_POSITION_SIZE, int((buying_power * POSITION_SIZE_PERCENT) / 500)
+            )
+
         current_price = float(bars[-1].c)
         if current_price <= 0:
             return MIN_POSITION_SIZE
-        
+
         # Calculate position size: use percentage of buying power
         position_value = buying_power * POSITION_SIZE_PERCENT
         shares = int(position_value / current_price)
-        
+
         return max(MIN_POSITION_SIZE, shares)
     except Exception as e:
         print(f"⚠️  Error calculating position size: {e}")
@@ -113,7 +115,7 @@ def place_order(signal, symbol):
         account = api.get_account()
         buying_power = float(account.buying_power)
         portfolio_value = float(account.portfolio_value)
-        
+
         # Check current positions
         try:
             position = api.get_position(symbol)
@@ -138,8 +140,14 @@ def place_order(signal, symbol):
                     type="market",
                     time_in_force="day",
                 )
-                position_value = position_size * (float(api.get_bars(symbol, "1Day", limit=1)[-1].c) if api.get_bars(symbol, "1Day", limit=1) else 500)
-                print(f"✅ BUY order placed: {position_size} shares of {symbol} (~${position_value:.2f}, {POSITION_SIZE_PERCENT*100:.0f}% of buying power)")
+                position_value = position_size * (
+                    float(api.get_bars(symbol, "1Day", limit=1)[-1].c)
+                    if api.get_bars(symbol, "1Day", limit=1)
+                    else 500
+                )
+                print(
+                    f"✅ BUY order placed: {position_size} shares of {symbol} (~${position_value:.2f}, {POSITION_SIZE_PERCENT*100:.0f}% of buying power)"
+                )
                 return True
             else:
                 print(f"📊 Already holding {current_qty} shares of {symbol}")
@@ -158,8 +166,14 @@ def place_order(signal, symbol):
                     type="market",
                     time_in_force="day",
                 )
-                position_value = position_size * (float(api.get_bars(symbol, "1Day", limit=1)[-1].c) if api.get_bars(symbol, "1Day", limit=1) else 500)
-                print(f"✅ SELL order placed: {position_size} shares of {symbol} (~${position_value:.2f}, {POSITION_SIZE_PERCENT*100:.0f}% of buying power)")
+                position_value = position_size * (
+                    float(api.get_bars(symbol, "1Day", limit=1)[-1].c)
+                    if api.get_bars(symbol, "1Day", limit=1)
+                    else 500
+                )
+                print(
+                    f"✅ SELL order placed: {position_size} shares of {symbol} (~${position_value:.2f}, {POSITION_SIZE_PERCENT*100:.0f}% of buying power)"
+                )
                 return True
             else:
                 print("📊 No position to sell or already short")
@@ -200,18 +214,44 @@ def run_strategy():
         end=datetime.today().strftime("%Y-%m-%d"),
         interval="1d",
         progress=False,
+        auto_adjust=False,
     )
 
     if data.empty:
         print("❌ Failed to download market data")
         return
 
+    close_prices = data["Close"]
+    if isinstance(close_prices, pd.DataFrame):
+        close_prices = close_prices.iloc[:, 0]
+
     # Calculate indicators
-    data["RSI"] = ta.rsi(data["Close"], length=RSI_PERIOD)
-    macd = ta.macd(data["Close"], fast=MACD_FAST, slow=MACD_SLOW, signal=MACD_SIGNAL)
-    data["MACD"] = macd["MACD_12_26_9"]
-    data["MACD_Signal"] = macd["MACDs_12_26_9"]
-    data["MACD_Histogram"] = data["MACD"] - data["MACD_Signal"]  # Calculate histogram
+    signals = pd.DataFrame(index=data.index)
+    signals["RSI"] = ta.rsi(close_prices, length=RSI_PERIOD)
+    macd = ta.macd(close_prices, fast=MACD_FAST, slow=MACD_SLOW, signal=MACD_SIGNAL)
+
+    macd_col = f"MACD_{MACD_FAST}_{MACD_SLOW}_{MACD_SIGNAL}"
+    macd_signal_col = f"MACDs_{MACD_FAST}_{MACD_SLOW}_{MACD_SIGNAL}"
+
+    if (
+        macd is None
+        or macd.empty
+        or macd_col not in macd.columns
+        or macd_signal_col not in macd.columns
+    ):
+        print("❌ Failed to calculate MACD indicators")
+        return
+
+    signals["MACD"] = macd[macd_col]
+    signals["MACD_Signal"] = macd[macd_signal_col]
+    signals["MACD_Histogram"] = (
+        signals["MACD"] - signals["MACD_Signal"]
+    )  # Calculate histogram
+
+    signals = signals.dropna(subset=["RSI", "MACD", "MACD_Signal", "MACD_Histogram"])
+    if signals.empty:
+        print("❌ Not enough market data to generate indicators")
+        return
 
     # Generate signal - AGGRESSIVE STRATEGY for 3x growth in 30 days
     def generate_signal(row):
@@ -219,29 +259,29 @@ def run_strategy():
         macd = row["MACD"]
         macd_signal = row["MACD_Signal"]
         macd_histogram = row["MACD_Histogram"]
-        
+
         # More aggressive buy signals (wider RSI bands)
         if rsi < 40 and macd > macd_signal:
             return "BUY"
         # Buy on MACD bullish crossover even with moderate RSI
         if rsi < 55 and macd > macd_signal and macd_histogram > 0:
             return "BUY"
-        
+
         # More aggressive sell signals (wider RSI bands)
         if rsi > 60 and macd < macd_signal:
             return "SELL"
         # Sell on MACD bearish crossover even with moderate RSI
         if rsi > 45 and macd < macd_signal and macd_histogram < 0:
             return "SELL"
-        
+
         return "HOLD"
 
-    data["Signal"] = data.apply(generate_signal, axis=1)
-    latest_signal = data.iloc[-1]["Signal"]
-    latest_rsi = data.iloc[-1]["RSI"]
-    latest_macd = data.iloc[-1]["MACD"]
-    latest_macd_signal = data.iloc[-1]["MACD_Signal"]
-    latest_close = data.iloc[-1]["Close"]
+    signals["Signal"] = signals.apply(generate_signal, axis=1)
+    latest_signal = signals.iloc[-1]["Signal"]
+    latest_rsi = signals.iloc[-1]["RSI"]
+    latest_macd = signals.iloc[-1]["MACD"]
+    latest_macd_signal = signals.iloc[-1]["MACD_Signal"]
+    latest_close = float(close_prices.loc[signals.index[-1]])
 
     print("\n📊 Market Analysis:")
     print(f"   Symbol: {SYMBOL}")
@@ -262,13 +302,15 @@ def run_strategy():
         print(f"   Portfolio Value: ${portfolio_value:,.2f}")
         print(f"   Cash: ${float(account.cash):,.2f}")
         print(f"   Buying Power: ${float(account.buying_power):,.2f}")
-        
+
         # Calculate growth goal progress (3x in 30 days)
         # Note: This is a simplified version - in production, track initial value
-        daily_target = (GROWTH_TARGET ** (1/TARGET_DAYS)) - 1
+        daily_target = (GROWTH_TARGET ** (1 / TARGET_DAYS)) - 1
         print(f"\n🎯 Growth Goal: {GROWTH_TARGET}x in {TARGET_DAYS} days")
         print(f"   Daily Target Return: {daily_target*100:.2f}%")
-        print(f"   Strategy: Aggressive position sizing ({POSITION_SIZE_PERCENT*100:.0f}% of buying power per trade)")
+        print(
+            f"   Strategy: Aggressive position sizing ({POSITION_SIZE_PERCENT*100:.0f}% of buying power per trade)"
+        )
     except Exception as e:
         print(f"⚠️  Could not fetch account info: {e}")
 
