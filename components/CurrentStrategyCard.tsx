@@ -27,7 +27,7 @@ const CurrentStrategyCard = () => {
       </div>
       <div className="mb-2">
         <span className="font-semibold">Time:</span>
-        <span className="ml-2 text-gray-700">{new Date(data.time).toLocaleString()}</span>
+        <span className="ml-2 text-gray-700">{data.time ? new Date(data.time).toLocaleString() : '-'}</span>
       </div>
       <div className="mb-2">
         <span className="font-semibold">Why Buy:</span>

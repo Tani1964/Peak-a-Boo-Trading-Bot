@@ -254,7 +254,7 @@ export default function PerformanceGraph({
           label: (context: any) => {
             const label = context.dataset.label || '';
             const value = context.parsed.y;
-            return `${label}: $${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            return `${label}: $${(value ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
           },
         },
       },
@@ -333,7 +333,7 @@ export default function PerformanceGraph({
           padding: 8,
           callback: function(value: number | string) {
             const numValue = typeof value === 'string' ? parseFloat(value) : value;
-            return '$' + numValue.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+            return '$' + (numValue ?? 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
           },
         },
         border: {

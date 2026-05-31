@@ -50,19 +50,19 @@ export default function AccountInfo({ data }: AccountInfoProps) {
         <div className="flex justify-between items-center py-2">
           <span className="text-gray-600 font-medium text-base">Portfolio Value</span>
           <span className="font-bold text-2xl text-gray-900">
-            ${account.portfolioValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            ${(account.portfolioValue ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </span>
         </div>
         <div className="flex justify-between items-center py-2 bg-gray-50 -mx-4 px-4 rounded-lg">
           <span className="text-gray-600 font-medium text-base">Cash Available</span>
           <span className="font-bold text-lg text-gray-900">
-            ${account.cash.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            ${(account.cash ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </span>
         </div>
         <div className="flex justify-between items-center py-2 bg-blue-50 -mx-4 px-4 rounded-lg">
           <span className="text-gray-700 font-medium text-base">Buying Power</span>
           <span className="font-bold text-lg text-blue-700">
-            ${account.buyingPower.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            ${(account.buyingPower ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </span>
         </div>
         <div className="flex justify-between items-center py-2 border-t border-gray-100">

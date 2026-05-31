@@ -61,11 +61,11 @@ export default function DataStatistics({ symbol, refreshKey, refreshInterval = 0
           <div className="grid grid-cols-2 gap-4">
             <div>
               <p className="text-sm text-gray-600 font-medium">Total Trades</p>
-              <p className="text-2xl font-bold text-gray-900">{statistics.trades.total.toLocaleString()}</p>
+              <p className="text-2xl font-bold text-gray-900">{(statistics.trades.total ?? 0).toLocaleString()}</p>
             </div>
             <div>
               <p className="text-sm text-gray-600 font-medium">Filled Trades</p>
-              <p className="text-2xl font-bold text-green-600">{statistics.trades.filled.toLocaleString()}</p>
+              <p className="text-2xl font-bold text-green-600">{(statistics.trades.filled ?? 0).toLocaleString()}</p>
             </div>
           </div>
           {statistics.trades.dateRange.oldest && (
@@ -106,11 +106,11 @@ export default function DataStatistics({ symbol, refreshKey, refreshInterval = 0
           <div className="grid grid-cols-2 gap-4">
             <div>
               <p className="text-sm text-gray-600 font-medium">Total Signals</p>
-              <p className="text-2xl font-bold text-gray-900">{statistics.signals.total.toLocaleString()}</p>
+              <p className="text-2xl font-bold text-gray-900">{(statistics.signals.total ?? 0).toLocaleString()}</p>
             </div>
             <div>
               <p className="text-sm text-gray-600 font-medium">Executed Signals</p>
-              <p className="text-2xl font-bold text-green-600">{statistics.signals.executed.toLocaleString()}</p>
+              <p className="text-2xl font-bold text-green-600">{(statistics.signals.executed ?? 0).toLocaleString()}</p>
             </div>
           </div>
           {statistics.signals.dateRange.oldest && (
@@ -150,7 +150,7 @@ export default function DataStatistics({ symbol, refreshKey, refreshInterval = 0
           </h3>
           <div>
             <p className="text-sm text-gray-600 font-medium">Total Snapshots</p>
-            <p className="text-2xl font-bold text-gray-900">{statistics.snapshots.total.toLocaleString()}</p>
+            <p className="text-2xl font-bold text-gray-900">{(statistics.snapshots.total ?? 0).toLocaleString()}</p>
           </div>
         </div>
       </div>
