@@ -5,6 +5,8 @@ import { Signal } from '@/models/Signal';
 import { Trade } from '@/models/Trade';
 import { NextRequest, NextResponse } from 'next/server';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(_request: NextRequest) {
   await connectDB();
 

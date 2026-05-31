@@ -6,6 +6,8 @@ import { Signal } from '@/models/Signal';
 import { Trade } from '@/models/Trade';
 import { NextRequest, NextResponse } from 'next/server';
 
+export const dynamic = 'force-dynamic';
+
 const POSITION_SIZE = 1;
 
 /**

@@ -5,6 +5,8 @@ import { AccountSnapshot } from '@/models/AccountSnapshot';
 import { NextRequest, NextResponse } from 'next/server';
 import { FilterQuery } from 'mongoose';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   try {
     await connectDB();

@@ -5,6 +5,8 @@ import { Signal } from '@/models/Signal';
 import alpaca from '@/lib/alpaca';
 import { NextRequest, NextResponse } from 'next/server';
 
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: NextRequest) {
   try {
     await connectDB();

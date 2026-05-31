@@ -2,6 +2,8 @@ import connectDB from '@/lib/mongodb';
 import { Trade } from '@/models/Trade';
 import { NextRequest, NextResponse } from 'next/server';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   await connectDB();
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);

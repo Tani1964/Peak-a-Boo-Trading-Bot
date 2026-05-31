@@ -3,6 +3,8 @@ import connectDB from '@/lib/mongodb';
 import { Trade } from '@/models/Trade';
 import { NextRequest, NextResponse } from 'next/server';
 
+export const dynamic = 'force-dynamic';
+
 // This endpoint updates all trades with status 'pending' by checking Alpaca for their latest status
 export async function POST(_request: NextRequest) {
   await connectDB();

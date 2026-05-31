@@ -6,6 +6,8 @@ import { Signal } from '@/models/Signal';
 import { Trade } from '@/models/Trade';
 import { NextRequest, NextResponse } from 'next/server';
 
+export const dynamic = 'force-dynamic';
+
 // Goal: Triple account in 30 days (3x growth)
 const GROWTH_TARGET = 3.0; // 3x = 300% return
 const TARGET_DAYS = 30;
