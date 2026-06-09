@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 interface StrategyControlProps {
   symbol: string;
@@ -25,6 +25,11 @@ export default function StrategyControl({ symbol, onRefresh }: StrategyControlPr
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<SignalResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setResult(null);
+    setError(null);
+  }, [symbol]);
 
   const analyzeStrategy = async () => {
     setLoading(true);

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 interface HeaderProps {
   symbol: string;
@@ -9,6 +9,10 @@ interface HeaderProps {
 
 export default function Header({ symbol, onSymbolChange }: HeaderProps) {
   const [inputValue, setInputValue] = useState(symbol);
+
+  useEffect(() => {
+    setInputValue(symbol);
+  }, [symbol]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();

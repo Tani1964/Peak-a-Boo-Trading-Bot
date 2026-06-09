@@ -1,5 +1,6 @@
 import alpaca, { AlpacaOrder, AlpacaPosition } from '@/lib/alpaca';
 import { calculateIndicators, DEFAULT_CONFIG } from '@/lib/indicators';
+import { getMarketStatus } from '@/lib/market-hours';
 import connectDB from '@/lib/mongodb';
 import { fetchHistoricalData } from '@/lib/yahoo-finance';
 import { Signal } from '@/models/Signal';
@@ -77,14 +78,12 @@ export async function POST(request: NextRequest) {
     console.log(`🔄 Auto-trading: Processing symbol ${normalizedSymbol} (original: ${symbol})`);
 
     // Check if market is open (we'll still analyze even if closed, but only execute when open)
-    // Alpaca API uses US Eastern Time (ET) for market hours
-    const clock = await alpaca.getClock();
-    const isMarketOpen = clock.is_open;
-    
-    // Log market status with times in ET
+    const marketStatus = await getMarketStatus();
+    const isMarketOpen = marketStatus.isOpen;
+
     const currentTimeET = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
-    console.log(`📅 Market Status Check (ET): Current time: ${currentTimeET}, Market open: ${isMarketOpen}`);
-    console.log(`📅 Market Times (from Alpaca API): Next open: ${clock.next_open}, Next close: ${clock.next_close}`);
+    console.log(`📅 Market Status Check (ET): Current time: ${currentTimeET}, Market open: ${isMarketOpen}, source: ${marketStatus.source}`);
+    console.log(`📅 Market Times: Next open: ${marketStatus.nextOpen}, Next close: ${marketStatus.nextClose}`);
     
     if (!isMarketOpen) {
       console.log(`⏸️  Market closed for ${normalizedSymbol} - will analyze but skip execution`);
@@ -427,8 +426,8 @@ export async function POST(request: NextRequest) {
       }
     } else if (autoExecute && !isMarketOpen) {
       console.log(`⏸️  ${normalizedSymbol}: Market is closed - signal generated but trade not executed`);
-      result.message = `Market is currently closed - ${signal} signal generated but trade not executed. Next open: ${clock.next_open}`;
-      result.nextOpen = clock.next_open;
+      result.message = `Market is currently closed - ${signal} signal generated but trade not executed. Next open: ${marketStatus.nextOpen}`;
+      result.nextOpen = marketStatus.nextOpen;
     }
 
     console.log(`✅ Completed processing ${normalizedSymbol}: signal=${signal}, executed=${result.executed}`);

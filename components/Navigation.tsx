@@ -3,7 +3,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const navItems = [
-  { name: "Dashboard", path: "/dashboard" },
+  { name: "Dashboard", path: "/" },
   { name: "Trades", path: "/trades" },
   { name: "Strategies", path: "/strategies" },
   { name: "Performance", path: "/performance" },

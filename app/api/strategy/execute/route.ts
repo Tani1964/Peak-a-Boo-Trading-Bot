@@ -1,4 +1,5 @@
 import alpaca, { AlpacaAccount, AlpacaOrder, AlpacaPosition } from '@/lib/alpaca';
+import { getMarketStatus } from '@/lib/market-hours';
 import connectDB from '@/lib/mongodb';
 import { fetchCurrentPrice } from '@/lib/yahoo-finance';
 import { AccountSnapshot } from '@/models/AccountSnapshot';
@@ -151,12 +152,13 @@ export async function POST(request: NextRequest) {
     // - TEST_BYPASS_MARKET_HOURS=true: Bypass market hours check (allows trades even when closed)
     const testMarketClosed = process.env.TEST_MARKET_CLOSED === 'true';
     const testBypassMarketHours = process.env.TEST_BYPASS_MARKET_HOURS === 'true';
-    const clock = await alpaca.getClock();
-    
-    console.log(`🔍 Market Check: isOpen=${clock.is_open}, TEST_MARKET_CLOSED=${testMarketClosed}, TEST_BYPASS_MARKET_HOURS=${testBypassMarketHours}`);
-    
+    const marketStatus = await getMarketStatus();
+    const clock = { is_open: marketStatus.isOpen, next_open: marketStatus.nextOpen, next_close: marketStatus.nextClose };
+
+    console.log(`🔍 Market Check: isOpen=${marketStatus.isOpen} (source: ${marketStatus.source}), TEST_MARKET_CLOSED=${testMarketClosed}, TEST_BYPASS_MARKET_HOURS=${testBypassMarketHours}`);
+
     // Only check market hours if not bypassing
-    if (!testBypassMarketHours && (testMarketClosed || !clock.is_open)) {
+    if (!testBypassMarketHours && (testMarketClosed || !marketStatus.isOpen)) {
       // Save blocked trade attempt to history
       try {
         const currentPrice = await fetchCurrentPrice(normalizedSymbol).catch(() => 0);

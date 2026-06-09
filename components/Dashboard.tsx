@@ -3,7 +3,7 @@
 import { strategyApproach, strategyPlan, strategyReason } from '@/lib/strategy-text';
 import { TIMEZONES, useTimezone } from '@/lib/timezone';
 import dynamic from 'next/dynamic';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import useSWR from 'swr';
 import AccountInfo from './AccountInfo';
 import CurrentStrategyCard from './CurrentStrategyCard';
@@ -42,6 +42,11 @@ export default function Dashboard({ symbol }: DashboardProps) {
   const [refreshKey, setRefreshKey] = useState(0);
   const [refreshInterval, setRefreshInterval] = useState(30000); // Default: 30 seconds
   const { timezone, setTimezone } = useTimezone();
+
+  // When symbol changes, force a full data refresh
+  useEffect(() => {
+    setRefreshKey((prev) => prev + 1);
+  }, [symbol]);
 
   const { data: accountData } = useSWR(
     `/api/account?refresh=${refreshKey}`,

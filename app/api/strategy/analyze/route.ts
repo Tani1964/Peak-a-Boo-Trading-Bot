@@ -1,8 +1,8 @@
 import { calculateIndicators, DEFAULT_CONFIG, generateSignal } from '@/lib/indicators';
+import { getMarketStatus } from '@/lib/market-hours';
 import connectDB from '@/lib/mongodb';
 import { fetchHistoricalData } from '@/lib/yahoo-finance';
 import { Signal } from '@/models/Signal';
-import alpaca from '@/lib/alpaca';
 import { NextRequest, NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
@@ -16,12 +16,12 @@ export async function POST(request: NextRequest) {
     const normalizedSymbol = symbol.toUpperCase().trim();
 
     // Check if market is open
-    const clock = await alpaca.getClock();
-    if (!clock.is_open) {
+    const marketStatus = await getMarketStatus();
+    if (!marketStatus.isOpen) {
       return NextResponse.json({
         success: false,
         error: 'Market is currently closed',
-        nextOpen: clock.next_open,
+        nextOpen: marketStatus.nextOpen,
       });
     }
 

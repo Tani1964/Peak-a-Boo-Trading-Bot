@@ -1,18 +1,19 @@
-import alpaca from '@/lib/alpaca';
+import { getMarketStatus } from '@/lib/market-hours';
 import { NextRequest, NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(_request: NextRequest) {
   try {
-    const clock = await alpaca.getClock();
+    const status = await getMarketStatus();
 
     return NextResponse.json({
       success: true,
       clock: {
-        isOpen: clock.is_open,
-        nextOpen: clock.next_open,
-        nextClose: clock.next_close,
+        isOpen: status.isOpen,
+        nextOpen: status.nextOpen,
+        nextClose: status.nextClose,
+        source: status.source,
       },
     });
   } catch (error: unknown) {
