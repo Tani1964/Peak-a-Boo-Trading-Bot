@@ -9,7 +9,6 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
-const POSITION_SIZE = 1;
 
 /**
  * Map Alpaca order status to Trade model status enum
@@ -79,7 +78,8 @@ export async function POST(request: NextRequest) {
 
     // Check if market is open (we'll still analyze even if closed, but only execute when open)
     const marketStatus = await getMarketStatus();
-    const isMarketOpen = marketStatus.isOpen;
+    const testBypassMarketHours = process.env.TEST_BYPASS_MARKET_HOURS === 'true';
+    const isMarketOpen = testBypassMarketHours || marketStatus.isOpen;
 
     const currentTimeET = new Date().toLocaleString('en-US', { timeZone: 'America/New_York' });
     console.log(`📅 Market Status Check (ET): Current time: ${currentTimeET}, Market open: ${isMarketOpen}, source: ${marketStatus.source}`);
@@ -153,20 +153,9 @@ export async function POST(request: NextRequest) {
 
     // --- Risk Management ---
     // Limit position size to 10% of portfolio value
-    const maxPositionValue = portfolioValue * 0.1;
+    const maxPositionValue = portfolioValue > 0 ? portfolioValue * 0.1 : buyingPower * 0.1;
     const maxQty = Math.max(1, Math.floor(maxPositionValue / latestPrice));
-    // Prevent overtrading: do not enter a new trade if already in a position
-    let currentPosition: AlpacaPosition | null = null;
-    try {
-      currentPosition = await alpaca.getPosition(normalizedSymbol) as AlpacaPosition;
-    } catch {}
-      const _currentQty = currentPosition ? parseInt(currentPosition.qty) : 0;
-    // Max daily loss limit: halt trading if loss exceeds 5% of portfolio
-    const dailyLossLimit = portfolioValue * 0.05;
-    if (portfolioValue < equity - dailyLossLimit) {
-      signal = 'HOLD';
-      console.log('Daily loss limit reached, halting trading for today.');
-    }
+    console.log(`💰 Position sizing: portfolioValue=$${portfolioValue.toFixed(2)}, maxQty=${maxQty}, price=$${latestPrice.toFixed(2)}`);
 
     // Save signal to database
     const signalDoc = new Signal({
@@ -274,82 +263,40 @@ export async function POST(request: NextRequest) {
         let order = null;
 
         if (signal === 'BUY') {
-          // --- Stop-Loss/Take-Profit Logic ---
-          // If already in a long position, do not buy more
           if (currentQty > 0) {
-            console.log('Already in a long position, skipping buy.');
+            console.log(`⏸️  ${normalizedSymbol}: Already in a long position (${currentQty} shares), skipping buy.`);
             order = null;
           } else {
-            // Close any short position first if we're short
-            if (currentQty < 0) {
-              console.log(`🔄 ${normalizedSymbol}: Closing short position before buying...`);
-              await alpaca.closePosition(normalizedSymbol);
-            }
-            // Place buy order (limit position size)
+            const stopPrice = Math.round(latestPrice * 0.97 * 100) / 100;
+            const takeProfitPrice = Math.round(latestPrice * 1.05 * 100) / 100;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             order = await alpaca.createOrder({
               symbol: normalizedSymbol,
               qty: maxQty,
               side: 'buy',
               type: 'market',
               time_in_force: 'day',
-            });
-            console.log(`✅ BUY order placed: ${maxQty} shares of ${normalizedSymbol}`);
+              order_class: 'bracket',
+              take_profit: { limit_price: takeProfitPrice.toString() },
+              stop_loss: { stop_price: stopPrice.toString() },
+            } as any);
+            console.log(`✅ BUY bracket order: ${maxQty} shares of ${normalizedSymbol} | stop=$${stopPrice} | target=$${takeProfitPrice}`);
           }
         } else if (signal === 'SELL') {
-          // If already in a short position, do not sell more
-          if (currentQty < 0) {
-            console.log('Already in a short position, skipping sell.');
-            order = null;
+          if (currentQty > 0) {
+            // Long-only strategy: SELL means exit the long position, not go short
+            console.log(`🔄 ${normalizedSymbol}: Closing long position (${currentQty} shares)...`);
+            order = await alpaca.closePosition(normalizedSymbol);
+            console.log(`✅ Long position closed for ${normalizedSymbol}`);
           } else {
-            // Close long position if we're long
-            if (currentQty > 0) {
-              console.log(`🔄 ${normalizedSymbol}: Closing long position before selling...`);
-              await alpaca.closePosition(normalizedSymbol);
-            }
-            // Place sell (short) order (limit position size)
-            order = await alpaca.createOrder({
-              symbol: normalizedSymbol,
-              qty: maxQty,
-              side: 'sell',
-              type: 'market',
-              time_in_force: 'day',
-            });
-            console.log(`✅ SELL order placed: ${maxQty} shares of ${normalizedSymbol}`);
+            console.log(`⏸️  ${normalizedSymbol}: No long position to close (currentQty=${currentQty}), skipping SELL.`);
+            order = null;
           }
         } else {
           console.log(`⏸️  ${normalizedSymbol}: No action - signal=${signal}, currentQty=${currentQty}`);
         }
 
         if (order) {
-          // --- Stop-Loss/Take-Profit Orders ---
-          // After a buy, place a stop-loss and take-profit order (OCO logic)
-          // (This is a simplified version; for real OCO, use Alpaca bracket orders if available)
-          if (signal === 'BUY') {
-            const stopLossPrice = latestPrice * 0.97; // 3% stop loss
-            const takeProfitPrice = latestPrice * 1.05; // 5% take profit
-            try {
-              await alpaca.createOrder({
-                symbol: normalizedSymbol,
-                qty: maxQty,
-                side: 'sell',
-                type: 'stop',
-                stop_price: stopLossPrice,
-                time_in_force: 'gtc',
-              });
-              await alpaca.createOrder({
-                symbol: normalizedSymbol,
-                qty: maxQty,
-                side: 'sell',
-                type: 'limit',
-                limit_price: takeProfitPrice,
-                time_in_force: 'gtc',
-              });
-              console.log('Stop-loss and take-profit orders placed.');
-            } catch (e) {
-              console.error('Failed to place stop-loss/take-profit orders:', e);
-            }
-          }
-        // ...existing code...
           const orderData = order as AlpacaOrder;
           // Poll for order status to be 'filled'
           let finalOrder = orderData;
@@ -369,7 +316,8 @@ export async function POST(request: NextRequest) {
           const updatedEquity = parseFloat(updatedAccount.equity || '0');
           // Calculate trade value
           const tradePrice = parseFloat(finalOrder.filled_avg_price || '0');
-          const tradeValue = POSITION_SIZE * tradePrice;
+          const filledQty = parseInt(finalOrder.filled_qty || String(maxQty));
+          const tradeValue = filledQty * tradePrice;
           // Map Alpaca order status to Trade model status
           const tradeStatus = mapAlpacaStatusToTradeStatus(finalOrder.status);
           // Save trade to database with enhanced data
@@ -378,7 +326,7 @@ export async function POST(request: NextRequest) {
             symbol: normalizedSymbol,
             orderId: finalOrder.id,
             side: signal.toLowerCase() as 'buy' | 'sell',
-            quantity: POSITION_SIZE,
+            quantity: filledQty,
             price: tradePrice,
             status: tradeStatus,
             filledAt: finalOrder.filled_at ? new Date(finalOrder.filled_at) : undefined,

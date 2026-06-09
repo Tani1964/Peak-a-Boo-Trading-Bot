@@ -317,26 +317,13 @@ export async function POST(request: NextRequest) {
       }
     } else if (signal === 'SELL') {
       if (currentQty > 0) {
-        // Close long position
-        await alpaca.closePosition(normalizedSymbol);
-
-        // Place sell (short) order with calculated position size
-        order = await alpaca.createOrder({
-          symbol: normalizedSymbol,
-          qty: positionSize,
-          side: 'sell',
-          type: 'market',
-          time_in_force: 'day',
-        });
-
-        const positionValue = positionSize * (await fetchCurrentPrice(normalizedSymbol).catch(() => 500));
-        const maxAvailable = Math.max(buyingPower, cash);
-        const sizePercent = maxAvailable > 0 ? (positionValue / maxAvailable) * 100 : BASE_POSITION_SIZE_PERCENT * 100;
-        console.log(`✅ AGGRESSIVE SELL order placed: ${positionSize} shares of ${normalizedSymbol} (~$${positionValue.toFixed(2)}, ${sizePercent.toFixed(0)}% of available funds [Cash: $${cash.toFixed(2)}, BP: $${buyingPower.toFixed(2)}])`);
+        // Long-only strategy: SELL means exit the long, not go short
+        order = await alpaca.closePosition(normalizedSymbol);
+        console.log(`✅ Closed long position: ${currentQty} shares of ${normalizedSymbol}`);
       } else {
         return NextResponse.json({
           success: true,
-          message: 'No position to sell or already short',
+          message: 'No long position to close',
           growth: {
             current: currentGrowth,
             target: requiredGrowth,

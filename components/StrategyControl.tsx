@@ -21,14 +21,26 @@ interface SignalResult {
   };
 }
 
+interface AnalyzeResponse {
+  success: boolean;
+  signal?: SignalResult;
+  marketOpen?: boolean;
+  nextOpen?: string;
+  error?: string;
+}
+
 export default function StrategyControl({ symbol, onRefresh }: StrategyControlProps) {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<SignalResult | null>(null);
+  const [marketOpen, setMarketOpen] = useState<boolean | null>(null);
+  const [nextOpen, setNextOpen] = useState<string | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setResult(null);
     setError(null);
+    setMarketOpen(null);
+    setNextOpen(undefined);
   }, [symbol]);
 
   const analyzeStrategy = async () => {
@@ -43,14 +55,16 @@ export default function StrategyControl({ symbol, onRefresh }: StrategyControlPr
         body: JSON.stringify({ symbol }),
       });
 
-      const data = await response.json();
+      const data: AnalyzeResponse = await response.json();
 
       if (!data.success) {
         setError(data.error || 'Failed to analyze strategy');
         return;
       }
 
-      setResult(data.signal);
+      setResult(data.signal!);
+      setMarketOpen(data.marketOpen ?? null);
+      setNextOpen(data.nextOpen);
       // Refresh the dashboard to show the new signal in history
       onRefresh();
     } catch (err: unknown) {
@@ -113,13 +127,23 @@ export default function StrategyControl({ symbol, onRefresh }: StrategyControlPr
           {result && (
             <button
               onClick={executeStrategy}
-              disabled={loading || result.signal === 'HOLD'}
+              disabled={loading || result.signal === 'HOLD' || marketOpen === false}
+              title={marketOpen === false ? 'Market is closed — execution blocked' : undefined}
               className="flex-1 px-6 py-4 bg-gradient-to-r from-green-600 to-emerald-600 text-white text-base font-bold rounded-xl hover:from-green-700 hover:to-emerald-700 disabled:from-gray-400 disabled:to-gray-500 disabled:cursor-not-allowed transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
             >
               {loading ? '⏳ Executing...' : `⚡ Execute ${result.signal}`}
             </button>
           )}
         </div>
+
+        {marketOpen === false && result && (
+          <div className="p-4 bg-amber-50 border-2 border-amber-300 rounded-xl">
+            <p className="text-amber-800 font-semibold text-sm">
+              Market is closed — signal generated but execution is blocked.
+              {nextOpen && ` Next open: ${new Date(nextOpen).toLocaleString()}`}
+            </p>
+          </div>
+        )}
 
         {error && (
           <div className="p-5 bg-gradient-to-r from-red-50 to-rose-50 border-2 border-red-300 rounded-xl">

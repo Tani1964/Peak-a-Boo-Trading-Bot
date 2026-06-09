@@ -15,15 +15,8 @@ export async function POST(request: NextRequest) {
     const { symbol = 'SPY' } = body;
     const normalizedSymbol = symbol.toUpperCase().trim();
 
-    // Check if market is open
+    // Check market status (informational only — analysis works any time)
     const marketStatus = await getMarketStatus();
-    if (!marketStatus.isOpen) {
-      return NextResponse.json({
-        success: false,
-        error: 'Market is currently closed',
-        nextOpen: marketStatus.nextOpen,
-      });
-    }
 
     // Fetch historical data (last 6 months for sufficient indicator calculation)
     const endDate = new Date();
@@ -77,6 +70,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      marketOpen: marketStatus.isOpen,
+      marketSource: marketStatus.source,
+      nextOpen: marketStatus.isOpen ? undefined : marketStatus.nextOpen,
       signal: {
         id: signalDoc._id.toString(),
         timestamp: signalDoc.timestamp,
